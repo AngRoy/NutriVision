@@ -11,34 +11,23 @@ from transformers import CLIPProcessor, CLIPModel, BlipProcessor, BlipForConditi
 import plotly.express as px
 import numpy as np
 
-# -------------------------------
-# Helper: Double Rerun Function
+# Helper: Rerun Function
 # This injects JavaScript to reload the page twice in quick succession.
-# -------------------------------
-def double_rerun():
+def jsrerun():
     st.markdown("""
-    <script>
-    setTimeout(function(){
-      window.location.reload();
-      setTimeout(function(){
+        <script>
+        setTimeout(function(){
         window.location.reload();
-      }, 50);
-    }, 100);
-    </script>
-    """, unsafe_allow_html=True)
-
-# -------------------------------
-# PERSISTENT LOGIN: LOAD QUERY PARAMETERS (New API)
-# -------------------------------
+        }, 100);
+        </script>
+        """, unsafe_allow_html=True)
+    
 query_params = st.query_params
 if "user_id" in query_params and query_params["user_id"]:
     st.session_state.logged_in = True
     st.session_state.user_id = int(query_params["user_id"][0])
     st.session_state.username = query_params["username"][0] if "username" in query_params else ""
 
-# -------------------------------
-# FIXED HIGH-TECH DARK THEME WITH STARFIELD BACKGROUND
-# -------------------------------
 st.markdown(
     """
     <style>
@@ -120,9 +109,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# -------------------------------
-# ANIMATED, CENTERED LOADING SCREEN (Custom Spinner)
-# -------------------------------
 if "app_loaded" not in st.session_state:
     placeholder = st.empty()
     placeholder.markdown(
@@ -382,6 +368,7 @@ def login_form():
             }
             st.session_state.preferred_diet = "Not specified"
             st.success("Logged in successfully!")
+            st.button("Continue")
         else:
             st.error("Invalid username or password.")
 
@@ -424,7 +411,8 @@ def registration_form():
                 }
                 st.session_state.preferred_diet = reg_preferred_diet if reg_preferred_diet != "" else "Not specified"
                 st.query_params = {"user_id": [str(new_user_id)], "username": [reg_username]}
-                double_rerun()
+                jsrerun()
+                st.button("Continue")
             else:
                 st.error(msg)
 
@@ -603,7 +591,7 @@ with tabs[3]:
         if profile_pic_path:
             st.session_state.user_info['profile_pic'] = profile_pic_path
         st.success("Profile updated successfully!")
-        double_rerun()
+        jsrerun()
 
 # -------------------------------
 # TAB 4: Logout
@@ -618,4 +606,5 @@ with tabs[4]:
         st.session_state.preferred_diet = "Not specified"
         # Clear query parameters (if needed)
         st.query_params = {}
-        double_rerun()
+        jsrerun()
+        st.button("Confirm")
