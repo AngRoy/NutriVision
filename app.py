@@ -3,7 +3,6 @@ import sqlite3
 import datetime
 import json
 import time
-import io
 import streamlit as st
 import torch
 import torch.nn as nn
@@ -131,7 +130,6 @@ if "app_loaded" not in st.session_state:
 def init_db():
     conn = sqlite3.connect("nutrivision_app.db", check_same_thread=False)
     c = conn.cursor()
-    # Check if the "users" table exists and has the expected columns.
     c.execute("PRAGMA table_info(users)")
     user_columns = [col[1] for col in c.fetchall()]
     if not user_columns or "height" not in user_columns or "profile_pic" not in user_columns:
@@ -140,7 +138,6 @@ def init_db():
     meal_columns = [col[1] for col in c.fetchall()]
     if not meal_columns or "meal_image" not in meal_columns:
         c.execute("DROP TABLE IF EXISTS meals")
-    # Create tables with the desired schema
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -187,10 +184,7 @@ def login_user(username, password):
     c = conn.cursor()
     c.execute("SELECT id FROM users WHERE username=? AND password=?", (username, password))
     result = c.fetchone()
-    if result:
-        return result[0]
-    else:
-        return None
+    return result[0] if result else None
 
 def store_meal(user_id, source, caption, predicted, calories, meal_image_path):
     c = conn.cursor()
@@ -235,7 +229,6 @@ class NutriVisionNetMultiHead(nn.Module):
         super(NutriVisionNetMultiHead, self).__init__()
         self.device = device
         
-        # --- Load CLIP model & processor ---
         self.clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
         self.clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         for param in self.clip_model.text_model.parameters():
@@ -244,14 +237,12 @@ class NutriVisionNetMultiHead(nn.Module):
             for param in self.clip_model.vision_model.parameters():
                 param.requires_grad = False
         
-        # --- Load BLIP model for caption generation (frozen) ---
         self.blip_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
         self.blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
         for param in self.blip_model.parameters():
             param.requires_grad = False
         
-        # --- Define regression heads for each source ---
-        fusion_dim = 1024  # 512 from image + 512 from text
+        fusion_dim = 1024
         hidden_dim = 512
         self.food_nutrition_head = nn.Sequential(
             nn.Linear(fusion_dim, hidden_dim),
@@ -273,26 +264,21 @@ class NutriVisionNetMultiHead(nn.Module):
         )
         
     def forward(self, image, source):
-        # Generate caption using BLIP
         blip_inputs = self.blip_processor(images=image, return_tensors="pt").to(self.device)
         with torch.no_grad():
             output_ids = self.blip_model.generate(**blip_inputs, max_length=50, num_beams=5)
         caption = self.blip_processor.decode(output_ids[0], skip_special_tokens=True)
         
-        # Get CLIP image embedding
         clip_image_inputs = self.clip_processor(images=image, return_tensors="pt").to(self.device)
         image_embeds = self.clip_model.get_image_features(**clip_image_inputs)
         
-        # Get CLIP text embedding from caption
         clip_text_inputs = self.clip_processor(text=[caption], return_tensors="pt", padding=True).to(self.device)
         text_embeds = self.clip_model.get_text_features(**clip_text_inputs)
         
-        # Normalize and fuse embeddings
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
         fused = torch.cat([image_embeds, text_embeds], dim=-1)
         
-        # Select regression head based on source
         if source == "food_nutrition":
             pred = self.food_nutrition_head(fused)
         elif source == "fv":
@@ -306,16 +292,15 @@ class NutriVisionNetMultiHead(nn.Module):
 @st.cache_resource(show_spinner=False)
 def load_model():
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    food_nutrition_dim = 3   # e.g., [Caloric Value, Fat, Carbohydrates]
-    fv_dim = 9               # for Fruits & Vegetables
-    fastfood_dim = 8         # for Fast Food
+    food_nutrition_dim = 3
+    fv_dim = 9
+    fastfood_dim = 8
     model = NutriVisionNetMultiHead(food_nutrition_dim, fv_dim, fastfood_dim, device=device, fine_tune_clip_image=True)
     model.to(device)
     checkpoint_path = "nutrivision_multihand.pt"
     if os.path.exists(checkpoint_path):
         state_dict = torch.load(checkpoint_path, map_location=device)
         model.load_state_dict(state_dict)
-    # If checkpoint is missing, silently load random weights.
     model.eval()
     return model, device
 
@@ -323,7 +308,6 @@ def infer_meal(image, source, model, device):
     with torch.no_grad():
         pred, caption = model(image, source)
     pred_list = pred.squeeze(0).cpu().numpy().tolist()
-    # Assume the first element is calories
     calories = pred_list[0] if pred_list else 0
     return pred_list, caption, calories
 
@@ -343,7 +327,6 @@ if "preferred_diet" not in st.session_state:
 
 # -------------------------------
 # USER AUTHENTICATION (Login/Registration)
-# Only show authentication forms if not logged in.
 # -------------------------------
 def login_form():
     st.subheader("Login")
@@ -397,7 +380,6 @@ def registration_form():
             )
             if success:
                 st.success(msg)
-                # Auto-login after registration and immediate rerun
                 st.session_state.logged_in = True
                 st.session_state.user_id = new_user_id
                 st.session_state.username = reg_username
@@ -409,7 +391,14 @@ def registration_form():
                     "profile_pic": profile_pic_path
                 }
                 st.session_state.preferred_diet = reg_preferred_diet if reg_preferred_diet != "" else "Not specified"
-                st.experimental_rerun()
+                try:
+                    if hasattr(st, "experimental_rerun"):
+                        st.experimental_rerun()
+                    else:
+                        st.stop()
+                except Exception:
+                    st.error("Failed to reload app. Please refresh the page.")
+                    st.stop()
             else:
                 st.error(msg)
 
@@ -589,8 +578,12 @@ with tabs[3]:
             st.session_state.user_info['profile_pic'] = profile_pic_path
         st.success("Profile updated successfully!")
         try:
-            st.experimental_rerun()
+            if hasattr(st, "experimental_rerun"):
+                st.experimental_rerun()
+            else:
+                st.stop()
         except Exception:
+            st.error("Failed to reload app. Please refresh the page.")
             st.stop()
 
 # -------------------------------
@@ -606,6 +599,10 @@ with tabs[4]:
         st.session_state.preferred_diet = "Not specified"
         st.success("Logged out successfully!")
         try:
-            st.experimental_rerun()
+            if hasattr(st, "experimental_rerun"):
+                st.experimental_rerun()
+            else:
+                st.stop()
         except Exception:
+            st.error("Failed to reload app. Please refresh the page.")
             st.stop()
