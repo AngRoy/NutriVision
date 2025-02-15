@@ -46,19 +46,15 @@ st.markdown(
 def init_db():
     conn = sqlite3.connect("nutrivision_app.db", check_same_thread=False)
     c = conn.cursor()
-    
     # Check if the "users" table exists and has the expected columns.
     c.execute("PRAGMA table_info(users)")
     user_columns = [col[1] for col in c.fetchall()]
     if not user_columns or "height" not in user_columns or "profile_pic" not in user_columns:
         c.execute("DROP TABLE IF EXISTS users")
-    
-    # Check if the "meals" table exists and has the expected column "meal_image"
     c.execute("PRAGMA table_info(meals)")
     meal_columns = [col[1] for col in c.fetchall()]
     if not meal_columns or "meal_image" not in meal_columns:
         c.execute("DROP TABLE IF EXISTS meals")
-    
     # Create tables with the desired schema
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -228,7 +224,7 @@ def load_model():
     if os.path.exists(checkpoint_path):
         state_dict = torch.load(checkpoint_path, map_location=device)
         model.load_state_dict(state_dict)
-
+    # If the checkpoint is not found, we silently load the model with random weights.
     model.eval()
     return model, device
 
@@ -240,7 +236,9 @@ def infer_meal(image, source, model, device):
     calories = pred_list[0] if pred_list else 0
     return pred_list, caption, calories
 
+# -------------------------------
 # SESSION STATE INITIALIZATION
+# -------------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_id" not in st.session_state:
@@ -273,7 +271,8 @@ def login_form():
                 "weight": info[1],
                 "age": info[2],
                 "gender": info[3],
-                "profile_pic": info[4]
+                "profile_pic": info[4],
+                "preferred_diet": "Not specified"
             }
             st.success("Logged in successfully!")
         else:
@@ -283,20 +282,32 @@ def registration_form():
     st.subheader("Register")
     reg_username = st.text_input("Username", key="reg_username")
     reg_password = st.text_input("Password", type="password", key="reg_password")
-    reg_height = st.number_input("Height (cm)", min_value=50.0, max_value=300.0, step=0.1, key="reg_height")
-    reg_weight = st.number_input("Weight (kg)", min_value=10.0, max_value=300.0, step=0.1, key="reg_weight")
-    reg_age = st.number_input("Age", min_value=1, max_value=120, step=1, key="reg_age")
-    reg_gender = st.selectbox("Gender", ["Male", "Female", "Other"], key="reg_gender")
-    reg_profile = st.file_uploader("Upload Profile Picture", type=["jpg", "jpeg", "png"], key="reg_profile")
+    # Optional fields: only username and password are required.
+    reg_height = st.number_input("Height (cm) [Optional]", min_value=0.0, max_value=300.0, step=0.1, key="reg_height", value=0.0)
+    reg_weight = st.number_input("Weight (kg) [Optional]", min_value=0.0, max_value=300.0, step=0.1, key="reg_weight", value=0.0)
+    reg_age = st.number_input("Age [Optional]", min_value=0, max_value=120, step=1, key="reg_age", value=0)
+    reg_gender = st.selectbox("Gender [Optional]", ["", "Male", "Female", "Other"], key="reg_gender")
+    reg_preferred_diet = st.text_input("Preferred Diet [Optional]", key="reg_preferred_diet")
+    reg_profile = st.file_uploader("Upload Profile Picture [Optional]", type=["jpg", "jpeg", "png"], key="reg_profile")
     if st.button("Register", key="reg_button"):
         profile_pic_path = ""
         if reg_profile is not None:
             profile_pic_path = save_uploaded_file(reg_profile, "profile_pics")
-        success, msg = register_user(reg_username, reg_password, reg_height, reg_weight, reg_age, reg_gender, profile_pic_path)
-        if success:
-            st.success(msg)
+        if reg_username == "" or reg_password == "":
+            st.error("Username and password are required!")
         else:
-            st.error(msg)
+            success, msg = register_user(
+                reg_username, reg_password,
+                reg_height if reg_height > 0 else None,
+                reg_weight if reg_weight > 0 else None,
+                reg_age if reg_age > 0 else None,
+                reg_gender if reg_gender != "" else None,
+                profile_pic_path
+            )
+            if success:
+                st.success(msg)
+            else:
+                st.error(msg)
 
 if not st.session_state.logged_in:
     auth_choice = st.radio("Select Option", ["Login", "Register"], horizontal=True)
@@ -412,10 +423,21 @@ with tabs[3]:
     st.header("Account Information")
     st.markdown(f"**Username:** {st.session_state.username}")
     if st.session_state.user_info:
-        st.markdown(f"**Height:** {st.session_state.user_info.get('height', 'N/A')} cm")
-        st.markdown(f"**Weight:** {st.session_state.user_info.get('weight', 'N/A')} kg")
-        st.markdown(f"**Age:** {st.session_state.user_info.get('age', 'N/A')}")
-        st.markdown(f"**Gender:** {st.session_state.user_info.get('gender', 'N/A')}")
+        height = st.session_state.user_info.get('height', None)
+        weight = st.session_state.user_info.get('weight', None)
+        age = st.session_state.user_info.get('age', None)
+        gender = st.session_state.user_info.get('gender', None)
+        st.markdown(f"**Height:** {height if height is not None else 'N/A'} cm")
+        st.markdown(f"**Weight:** {weight if weight is not None else 'N/A'} kg")
+        st.markdown(f"**Age:** {age if age is not None else 'N/A'}")
+        st.markdown(f"**Gender:** {gender if gender is not None else 'N/A'}")
+        if height and weight and height > 0:
+            bmi = weight / ((height/100)**2)
+            st.markdown(f"**Body Mass Index (BMI):** {bmi:.2f}")
+        else:
+            st.markdown("**Body Mass Index (BMI):** N/A")
+        preferred_diet = st.session_state.user_info.get('preferred_diet', 'Not specified')
+        st.markdown(f"**Preferred Diet:** {preferred_diet}")
         profile_pic = st.session_state.user_info.get('profile_pic', '')
         if profile_pic and os.path.exists(profile_pic):
             st.image(profile_pic, width=200)
@@ -423,6 +445,37 @@ with tabs[3]:
             st.write("No profile picture.")
     else:
         st.write("No user info available.")
+
+    st.markdown("---")
+    st.subheader("Update Profile Information")
+    new_height = st.number_input("Height (cm)", min_value=0.0, max_value=300.0, step=0.1, key="upd_height", value=st.session_state.user_info.get('height', 0) or 0)
+    new_weight = st.number_input("Weight (kg)", min_value=0.0, max_value=300.0, step=0.1, key="upd_weight", value=st.session_state.user_info.get('weight', 0) or 0)
+    new_age = st.number_input("Age", min_value=0, max_value=120, step=1, key="upd_age", value=st.session_state.user_info.get('age', 0) or 0)
+    new_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"], key="upd_gender", index=0 if not st.session_state.user_info.get('gender') else ["", "Male", "Female", "Other"].index(st.session_state.user_info.get('gender')))
+    new_preferred_diet = st.text_input("Preferred Diet", key="upd_preferred_diet", value=st.session_state.user_info.get('preferred_diet', ''))
+    new_profile = st.file_uploader("Update Profile Picture", type=["jpg", "jpeg", "png"], key="upd_profile")
+    if st.button("Update Profile"):
+        c = conn.cursor()
+        c.execute("UPDATE users SET height=?, weight=?, age=?, gender=? WHERE id=?",
+                  (new_height if new_height > 0 else None, new_weight if new_weight > 0 else None, new_age if new_age > 0 else None, new_gender if new_gender != "" else None, st.session_state.user_id))
+        conn.commit()
+        profile_pic_path = st.session_state.user_info.get('profile_pic', '')
+        if new_profile is not None:
+            profile_pic_path = save_uploaded_file(new_profile, "profile_pics")
+            c.execute("UPDATE users SET profile_pic=? WHERE id=?", (profile_pic_path, st.session_state.user_id))
+            conn.commit()
+        st.session_state.user_info['height'] = new_height if new_height > 0 else None
+        st.session_state.user_info['weight'] = new_weight if new_weight > 0 else None
+        st.session_state.user_info['age'] = new_age if new_age > 0 else None
+        st.session_state.user_info['gender'] = new_gender if new_gender != "" else None
+        st.session_state.user_info['preferred_diet'] = new_preferred_diet if new_preferred_diet != "" else "Not specified"
+        if profile_pic_path:
+            st.session_state.user_info['profile_pic'] = profile_pic_path
+        st.success("Profile updated successfully!")
+        try:
+            st.experimental_rerun()
+        except Exception:
+            st.stop()
 
 # TAB 4: Logout
 with tabs[4]:
@@ -433,4 +486,7 @@ with tabs[4]:
         st.session_state.username = ""
         st.session_state.user_info = {}
         st.success("Logged out successfully!")
-        st.experimental_rerun()
+        try:
+            st.experimental_rerun()
+        except Exception:
+            st.stop()
