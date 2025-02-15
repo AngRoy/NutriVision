@@ -11,35 +11,66 @@ from transformers import CLIPProcessor, CLIPModel, BlipProcessor, BlipForConditi
 import plotly.express as px
 import numpy as np
 
-# CUSTOM CSS FOR THE THEME (SKY BLUE & WHITE)
-st.markdown(
-    """
-    <style>
-    body {
-        background-color: #e0f7fa;
-        color: #000;
-        font-family: 'Helvetica', sans-serif;
-    }
-    .stTabs > div[role="tablist"] {
-        background-color: #81d4fa;
-    }
-    .stTabs div[role="tab"] {
-        font-size: 18px;
-        font-weight: bold;
-        color: white;
-    }
-    .stTabs div[role="tab"]:hover {
-        background-color: #4fc3f7;
-    }
-    .stButton>button {
-        background-color: #4fc3f7;
-        color: white;
-        font-weight: bold;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+# THEME SETUP: DARK/LIGHT TOGGLE WITH PURPLE-BLUE HIGH TECH STYLE
+def set_theme(theme_mode):
+    if theme_mode == "Dark":
+        st.markdown(
+            """
+            <style>
+            body {
+                background-color: #303F9F;
+                color: #FFFFFF;
+                font-family: 'Helvetica', sans-serif;
+            }
+            .stTabs > div[role="tablist"] {
+                background-color: #3F51B5;
+            }
+            .stTabs div[role="tab"] {
+                font-size: 18px;
+                font-weight: bold;
+                color: #FFFFFF;
+            }
+            .stTabs div[role="tab"]:hover {
+                background-color: #5C6BC0;
+            }
+            .stButton>button {
+                background-color: #5C6BC0;
+                color: #FFFFFF;
+                font-weight: bold;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:  # Light theme
+        st.markdown(
+            """
+            <style>
+            body {
+                background-color: #EDE7F6;
+                color: #3F51B5;
+                font-family: 'Helvetica', sans-serif;
+            }
+            .stTabs > div[role="tablist"] {
+                background-color: #9FA8DA;
+            }
+            .stTabs div[role="tab"] {
+                font-size: 18px;
+                font-weight: bold;
+                color: #3F51B5;
+            }
+            .stTabs div[role="tab"]:hover {
+                background-color: #C5CAE9;
+            }
+            .stButton>button {
+                background-color: #7986CB;
+                color: #FFFFFF;
+                font-weight: bold;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
 # DATABASE SETUP & FUNCTIONS
 @st.cache_resource(show_spinner=False)
@@ -92,9 +123,12 @@ def register_user(username, password, height, weight, age, gender, profile_pic_p
         c.execute("INSERT INTO users (username, password, height, weight, age, gender, profile_pic) VALUES (?, ?, ?, ?, ?, ?, ?)", 
                   (username, password, height, weight, age, gender, profile_pic_path))
         conn.commit()
-        return True, "User registered successfully."
+        # Auto-login after registration
+        c.execute("SELECT id FROM users WHERE username=?", (username,))
+        user_id = c.fetchone()[0]
+        return True, "User registered successfully.", user_id
     except sqlite3.IntegrityError:
-        return False, "Username already exists."
+        return False, "Username already exists.", None
 
 def login_user(username, password):
     c = conn.cursor()
@@ -224,7 +258,7 @@ def load_model():
     if os.path.exists(checkpoint_path):
         state_dict = torch.load(checkpoint_path, map_location=device)
         model.load_state_dict(state_dict)
-    # If the checkpoint is not found, we silently load the model with random weights.
+    # If checkpoint is missing, we silently load random weights.
     model.eval()
     return model, device
 
@@ -236,9 +270,7 @@ def infer_meal(image, source, model, device):
     calories = pred_list[0] if pred_list else 0
     return pred_list, caption, calories
 
-# -------------------------------
 # SESSION STATE INITIALIZATION
-# -------------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_id" not in st.session_state:
@@ -247,9 +279,16 @@ if "username" not in st.session_state:
     st.session_state.username = ""
 if "user_info" not in st.session_state:
     st.session_state.user_info = {}
+if "preferred_diet" not in st.session_state:
+    st.session_state.preferred_diet = "Not specified"
 
-# NAVIGATION: TOP TABS
-tabs = st.tabs(["Home", "Upload Meal", "Meal History", "Account", "Logout"])
+# THEME TOGGLE (Dark/Light)
+theme_mode = st.sidebar.radio("Select Theme", ["Light", "Dark"])
+set_theme(theme_mode)
+
+# Only show navbar if logged in
+if st.session_state.logged_in:
+    tabs = st.tabs(["Home", "Upload Meal", "Meal History", "Account", "Logout"])
 
 # USER AUTHENTICATION (Login/Registration)
 def login_form():
@@ -262,7 +301,6 @@ def login_form():
             st.session_state.logged_in = True
             st.session_state.user_id = user_id
             st.session_state.username = username
-            # Retrieve user info from DB
             c = conn.cursor()
             c.execute("SELECT height, weight, age, gender, profile_pic FROM users WHERE id=?", (user_id,))
             info = c.fetchone()
@@ -271,9 +309,9 @@ def login_form():
                 "weight": info[1],
                 "age": info[2],
                 "gender": info[3],
-                "profile_pic": info[4],
-                "preferred_diet": "Not specified"
+                "profile_pic": info[4]
             }
+            st.session_state.preferred_diet = "Not specified"
             st.success("Logged in successfully!")
         else:
             st.error("Invalid username or password.")
@@ -282,7 +320,6 @@ def registration_form():
     st.subheader("Register")
     reg_username = st.text_input("Username", key="reg_username")
     reg_password = st.text_input("Password", type="password", key="reg_password")
-    # Optional fields: only username and password are required.
     reg_height = st.number_input("Height (cm) [Optional]", min_value=0.0, max_value=300.0, step=0.1, key="reg_height", value=0.0)
     reg_weight = st.number_input("Weight (kg) [Optional]", min_value=0.0, max_value=300.0, step=0.1, key="reg_weight", value=0.0)
     reg_age = st.number_input("Age [Optional]", min_value=0, max_value=120, step=1, key="reg_age", value=0)
@@ -296,7 +333,7 @@ def registration_form():
         if reg_username == "" or reg_password == "":
             st.error("Username and password are required!")
         else:
-            success, msg = register_user(
+            success, msg, new_user_id = register_user(
                 reg_username, reg_password,
                 reg_height if reg_height > 0 else None,
                 reg_weight if reg_weight > 0 else None,
@@ -306,6 +343,18 @@ def registration_form():
             )
             if success:
                 st.success(msg)
+                # Auto-login
+                st.session_state.logged_in = True
+                st.session_state.user_id = new_user_id
+                st.session_state.username = reg_username
+                st.session_state.user_info = {
+                    "height": reg_height if reg_height > 0 else None,
+                    "weight": reg_weight if reg_weight > 0 else None,
+                    "age": reg_age if reg_age > 0 else None,
+                    "gender": reg_gender if reg_gender != "" else None,
+                    "profile_pic": profile_pic_path
+                }
+                st.session_state.preferred_diet = reg_preferred_diet if reg_preferred_diet != "" else "Not specified"
             else:
                 st.error(msg)
 
@@ -317,176 +366,180 @@ if not st.session_state.logged_in:
         registration_form()
     st.stop()
 
-# TAB 0: Home Dashboard
-with tabs[0]:
-    st.header("Dashboard")
-    st.write(f"Welcome, {st.session_state.username}!")
-    today = datetime.date.today()
-    daily_cal = get_daily_calories(st.session_state.user_id, today)
-    st.metric("Today's Calorie Intake", f"{daily_cal:.2f} kcal")
-    
-    daily_data = get_all_daily_calories(st.session_state.user_id)
-    if daily_data:
-        try:
-            import pandas as pd
-            df = pd.DataFrame(daily_data, columns=["Date", "Calories"])
-            fig = px.line(df, x="Date", y="Calories", title="Daily Calorie Intake", markers=True)
-            st.plotly_chart(fig, use_container_width=True)
-        except Exception as e:
-            st.write("Error generating graph:", e)
-    else:
-        st.write("No meal records to display.")
+# NAVIGATION TABS (only shown if logged in)
+if st.session_state.logged_in:
+    tabs = st.tabs(["Home", "Upload Meal", "Meal History", "Account", "Logout"])
 
-# TAB 1: Upload Meal
-with tabs[1]:
-    st.header("Upload a Meal")
-    st.write("Upload an image of your meal to get its estimated nutritional details.")
-    source_options = {"Food Nutrition": "food_nutrition", "Fruits & Vegetables": "fv", "Fast Food": "fastfood"}
-    selected_source_label = st.selectbox("Select Nutrition Category", list(source_options.keys()))
-    selected_source = source_options[selected_source_label]
-    
-    uploaded_meal = st.file_uploader("Choose a meal image (JPG, JPEG, PNG)", type=["jpg", "jpeg", "png"], key="meal_upload")
-    if uploaded_meal is not None:
-        try:
-            meal_image = Image.open(uploaded_meal).convert("RGB")
-            st.image(meal_image, caption="Uploaded Meal Image", use_column_width=True)
-        except Exception as e:
-            st.error(f"Error loading image: {e}")
+    # TAB 0: Home Dashboard
+    with tabs[0]:
+        st.header("Dashboard")
+        st.write(f"Welcome, {st.session_state.username}!")
+        today = datetime.date.today()
+        daily_cal = get_daily_calories(st.session_state.user_id, today)
+        st.metric("Today's Calorie Intake", f"{daily_cal:.2f} kcal")
         
-        if st.button("Analyze Meal", key="analyze_meal"):
-            with st.spinner("Running inference..."):
-                model, device = load_model()
-                pred_list, caption, calories = infer_meal(meal_image, selected_source, model, device)
-            st.success("Inference completed!")
-            st.markdown("### Inference Results")
-            st.write("**Generated Caption:**", caption)
-            st.write("**Predicted Nutritional Values:**")
-            if selected_source == "food_nutrition":
-                cols = ["Caloric Value", "Fat", "Carbohydrates"]
-            elif selected_source == "fv":
-                cols = ["energy (kcal/kJ)", "water (g)", "protein (g)", "total fat (g)", "carbohydrates (g)", "fiber (g)", "sugars (g)", "calcium (mg)", "iron (mg)"]
-            elif selected_source == "fastfood":
-                cols = ["calories", "cal_fat", "total_fat", "sat_fat", "trans_fat", "cholesterol", "sodium", "total_carb"]
-            result_dict = {col: [round(val, 2)] for col, val in zip(cols, pred_list)}
-            st.table(result_dict)
-            st.write("**Predicted Calories:**", f"{calories:.2f} kcal")
-            meal_img_path = save_uploaded_file(uploaded_meal, "meal_images")
-            store_meal(st.session_state.user_id, selected_source, caption, pred_list, calories, meal_img_path)
-            st.success("Meal recorded successfully!")
-
-# TAB 2: Meal History
-with tabs[2]:
-    st.header("Meal History")
-    history = get_meal_history(st.session_state.user_id)
-    if history:
-        for meal in history:
-            meal_time, source, caption, predicted, calories, meal_img = meal
-            st.markdown(f"**Time:** {meal_time}")
-            st.markdown(f"**Category:** {source}")
-            if meal_img and os.path.exists(meal_img):
-                st.image(meal_img, width=250)
-            st.markdown(f"**Caption:** {caption}")
-            st.markdown(f"**Predicted Calories:** {calories:.2f} kcal")
+        daily_data = get_all_daily_calories(st.session_state.user_id)
+        if daily_data:
             try:
-                pred_vals = json.loads(predicted)
-                if source == "food_nutrition":
-                    nutrient_list = ["Caloric Value", "Fat", "Carbohydrates"]
-                elif source == "fv":
-                    nutrient_list = ["energy (kcal/kJ)", "water (g)", "protein (g)", "total fat (g)", "carbohydrates (g)", "fiber (g)", "sugars (g)", "calcium (mg)", "iron (mg)"]
-                elif source == "fastfood":
-                    nutrient_list = ["calories", "cal_fat", "total_fat", "sat_fat", "trans_fat", "cholesterol", "sodium", "total_carb"]
-                else:
-                    nutrient_list = []
-                st.markdown("**Nutritional Details:**")
-                st.table({
-                    "Nutrient": nutrient_list,
-                    "Value": [round(val, 2) for val in pred_vals]
-                })
+                import pandas as pd
+                df = pd.DataFrame(daily_data, columns=["Date", "Calories"])
+                fig = px.line(df, x="Date", y="Calories", title="Daily Calorie Intake", markers=True)
+                st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
-                st.write("Predicted:", predicted)
-            st.markdown("---")
-    else:
-        st.write("No meals recorded yet.")
+                st.write("Error generating graph:", e)
+        else:
+            st.write("No meal records to display.")
+
+    # TAB 1: Upload Meal
+    with tabs[1]:
+        st.header("Upload a Meal")
+        st.write("Upload an image of your meal to get its estimated nutritional details.")
+        source_options = {"Food Nutrition": "food_nutrition", "Fruits & Vegetables": "fv", "Fast Food": "fastfood"}
+        selected_source_label = st.selectbox("Select Nutrition Category", list(source_options.keys()))
+        selected_source = source_options[selected_source_label]
+        
+        uploaded_meal = st.file_uploader("Choose a meal image (JPG, JPEG, PNG)", type=["jpg", "jpeg", "png"], key="meal_upload")
+        if uploaded_meal is not None:
+            try:
+                meal_image = Image.open(uploaded_meal).convert("RGB")
+                st.image(meal_image, caption="Uploaded Meal Image", use_column_width=True)
+            except Exception as e:
+                st.error(f"Error loading image: {e}")
+            
+            if st.button("Analyze Meal", key="analyze_meal"):
+                with st.spinner("⏳ Running inference... Please wait..."):
+                    model, device = load_model()
+                    pred_list, caption, calories = infer_meal(meal_image, selected_source, model, device)
+                st.success("Inference completed!")
+                st.markdown("### Inference Results")
+                st.write("**Generated Caption:**", caption)
+                st.write("**Predicted Nutritional Values:**")
+                if selected_source == "food_nutrition":
+                    cols = ["Caloric Value", "Fat", "Carbohydrates"]
+                elif selected_source == "fv":
+                    cols = ["energy (kcal/kJ)", "water (g)", "protein (g)", "total fat (g)", "carbohydrates (g)", "fiber (g)", "sugars (g)", "calcium (mg)", "iron (mg)"]
+                elif selected_source == "fastfood":
+                    cols = ["calories", "cal_fat", "total_fat", "sat_fat", "trans_fat", "cholesterol", "sodium", "total_carb"]
+                result_dict = {col: [round(val, 2)] for col, val in zip(cols, pred_list)}
+                st.table(result_dict)
+                st.write("**Predicted Calories:**", f"{calories:.2f} kcal")
+                meal_img_path = save_uploaded_file(uploaded_meal, "meal_images")
+                store_meal(st.session_state.user_id, selected_source, caption, pred_list, calories, meal_img_path)
+                st.success("Meal recorded successfully!")
+
+    # TAB 2: Meal History
+    with tabs[2]:
+        st.header("Meal History")
+        history = get_meal_history(st.session_state.user_id)
+        if history:
+            for meal in history:
+                meal_time, source, caption, predicted, calories, meal_img = meal
+                st.markdown(f"**Time:** {meal_time}")
+                st.markdown(f"**Category:** {source}")
+                if meal_img and os.path.exists(meal_img):
+                    st.image(meal_img, width=250)
+                st.markdown(f"**Caption:** {caption}")
+                st.markdown(f"**Predicted Calories:** {calories:.2f} kcal")
+                try:
+                    pred_vals = json.loads(predicted)
+                    if source == "food_nutrition":
+                        nutrient_list = ["Caloric Value", "Fat", "Carbohydrates"]
+                    elif source == "fv":
+                        nutrient_list = ["energy (kcal/kJ)", "water (g)", "protein (g)", "total fat (g)", "carbohydrates (g)", "fiber (g)", "sugars (g)", "calcium (mg)", "iron (mg)"]
+                    elif source == "fastfood":
+                        nutrient_list = ["calories", "cal_fat", "total_fat", "sat_fat", "trans_fat", "cholesterol", "sodium", "total_carb"]
+                    else:
+                        nutrient_list = []
+                    st.markdown("**Nutritional Details:**")
+                    st.table({
+                        "Nutrient": nutrient_list,
+                        "Value": [round(val, 2) for val in pred_vals]
+                    })
+                except Exception as e:
+                    st.write("Predicted:", predicted)
+                st.markdown("---")
+        else:
+            st.write("No meals recorded yet.")
+        
+        daily_data = get_all_daily_calories(st.session_state.user_id)
+        if daily_data:
+            try:
+                import pandas as pd
+                df = pd.DataFrame(daily_data, columns=["Date", "Calories"])
+                fig = px.bar(df, x="Date", y="Calories", title="Daily Calorie Intake")
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.write("Error generating graph:", e)
+
+    # TAB 3: Account
+    with tabs[3]:
+        st.header("Account Information")
+        st.markdown(f"**Username:** {st.session_state.username}")
+        if st.session_state.user_info:
+            height = st.session_state.user_info.get('height', None)
+            weight = st.session_state.user_info.get('weight', None)
+            age = st.session_state.user_info.get('age', None)
+            gender = st.session_state.user_info.get('gender', None)
+            st.markdown(f"**Height:** {height if height is not None else 'N/A'} cm")
+            st.markdown(f"**Weight:** {weight if weight is not None else 'N/A'} kg")
+            st.markdown(f"**Age:** {age if age is not None else 'N/A'}")
+            st.markdown(f"**Gender:** {gender if gender is not None else 'N/A'}")
+            if height and weight and height > 0:
+                bmi = weight / ((height/100)**2)
+                st.markdown(f"**Body Mass Index (BMI):** {bmi:.2f}")
+            else:
+                st.markdown("**Body Mass Index (BMI):** N/A")
+            st.markdown(f"**Preferred Diet:** {st.session_state.preferred_diet}")
+            profile_pic = st.session_state.user_info.get('profile_pic', '')
+            if profile_pic and os.path.exists(profile_pic):
+                st.image(profile_pic, width=200)
+            else:
+                st.write("No profile picture.")
+        else:
+            st.write("No user info available.")
     
-    daily_data = get_all_daily_calories(st.session_state.user_id)
-    if daily_data:
-        try:
-            import pandas as pd
-            df = pd.DataFrame(daily_data, columns=["Date", "Calories"])
-            fig = px.bar(df, x="Date", y="Calories", title="Daily Calorie Intake")
-            st.plotly_chart(fig, use_container_width=True)
-        except Exception as e:
-            st.write("Error generating graph:", e)
-
-# TAB 3: Account
-with tabs[3]:
-    st.header("Account Information")
-    st.markdown(f"**Username:** {st.session_state.username}")
-    if st.session_state.user_info:
-        height = st.session_state.user_info.get('height', None)
-        weight = st.session_state.user_info.get('weight', None)
-        age = st.session_state.user_info.get('age', None)
-        gender = st.session_state.user_info.get('gender', None)
-        st.markdown(f"**Height:** {height if height is not None else 'N/A'} cm")
-        st.markdown(f"**Weight:** {weight if weight is not None else 'N/A'} kg")
-        st.markdown(f"**Age:** {age if age is not None else 'N/A'}")
-        st.markdown(f"**Gender:** {gender if gender is not None else 'N/A'}")
-        if height and weight and height > 0:
-            bmi = weight / ((height/100)**2)
-            st.markdown(f"**Body Mass Index (BMI):** {bmi:.2f}")
-        else:
-            st.markdown("**Body Mass Index (BMI):** N/A")
-        preferred_diet = st.session_state.user_info.get('preferred_diet', 'Not specified')
-        st.markdown(f"**Preferred Diet:** {preferred_diet}")
-        profile_pic = st.session_state.user_info.get('profile_pic', '')
-        if profile_pic and os.path.exists(profile_pic):
-            st.image(profile_pic, width=200)
-        else:
-            st.write("No profile picture.")
-    else:
-        st.write("No user info available.")
-
-    st.markdown("---")
-    st.subheader("Update Profile Information")
-    new_height = st.number_input("Height (cm)", min_value=0.0, max_value=300.0, step=0.1, key="upd_height", value=st.session_state.user_info.get('height', 0) or 0)
-    new_weight = st.number_input("Weight (kg)", min_value=0.0, max_value=300.0, step=0.1, key="upd_weight", value=st.session_state.user_info.get('weight', 0) or 0)
-    new_age = st.number_input("Age", min_value=0, max_value=120, step=1, key="upd_age", value=st.session_state.user_info.get('age', 0) or 0)
-    new_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"], key="upd_gender", index=0 if not st.session_state.user_info.get('gender') else ["", "Male", "Female", "Other"].index(st.session_state.user_info.get('gender')))
-    new_preferred_diet = st.text_input("Preferred Diet", key="upd_preferred_diet", value=st.session_state.user_info.get('preferred_diet', ''))
-    new_profile = st.file_uploader("Update Profile Picture", type=["jpg", "jpeg", "png"], key="upd_profile")
-    if st.button("Update Profile"):
-        c = conn.cursor()
-        c.execute("UPDATE users SET height=?, weight=?, age=?, gender=? WHERE id=?",
-                  (new_height if new_height > 0 else None, new_weight if new_weight > 0 else None, new_age if new_age > 0 else None, new_gender if new_gender != "" else None, st.session_state.user_id))
-        conn.commit()
-        profile_pic_path = st.session_state.user_info.get('profile_pic', '')
-        if new_profile is not None:
-            profile_pic_path = save_uploaded_file(new_profile, "profile_pics")
-            c.execute("UPDATE users SET profile_pic=? WHERE id=?", (profile_pic_path, st.session_state.user_id))
+        st.markdown("---")
+        st.subheader("Update Profile Information")
+        new_height = st.number_input("Height (cm)", min_value=0.0, max_value=300.0, step=0.1, key="upd_height", value=st.session_state.user_info.get('height', 0) or 0)
+        new_weight = st.number_input("Weight (kg)", min_value=0.0, max_value=300.0, step=0.1, key="upd_weight", value=st.session_state.user_info.get('weight', 0) or 0)
+        new_age = st.number_input("Age", min_value=0, max_value=120, step=1, key="upd_age", value=st.session_state.user_info.get('age', 0) or 0)
+        new_gender = st.selectbox("Gender", ["", "Male", "Female", "Other"], key="upd_gender", index=0 if not st.session_state.user_info.get('gender') else ["", "Male", "Female", "Other"].index(st.session_state.user_info.get('gender')))
+        new_preferred_diet = st.text_input("Preferred Diet", key="upd_preferred_diet", value=st.session_state.preferred_diet)
+        new_profile = st.file_uploader("Update Profile Picture", type=["jpg", "jpeg", "png"], key="upd_profile")
+        if st.button("Update Profile"):
+            c = conn.cursor()
+            c.execute("UPDATE users SET height=?, weight=?, age=?, gender=? WHERE id=?",
+                      (new_height if new_height > 0 else None, new_weight if new_weight > 0 else None, new_age if new_age > 0 else None, new_gender if new_gender != "" else None, st.session_state.user_id))
             conn.commit()
-        st.session_state.user_info['height'] = new_height if new_height > 0 else None
-        st.session_state.user_info['weight'] = new_weight if new_weight > 0 else None
-        st.session_state.user_info['age'] = new_age if new_age > 0 else None
-        st.session_state.user_info['gender'] = new_gender if new_gender != "" else None
-        st.session_state.user_info['preferred_diet'] = new_preferred_diet if new_preferred_diet != "" else "Not specified"
-        if profile_pic_path:
-            st.session_state.user_info['profile_pic'] = profile_pic_path
-        st.success("Profile updated successfully!")
-        try:
-            st.experimental_rerun()
-        except Exception:
-            st.stop()
+            profile_pic_path = st.session_state.user_info.get('profile_pic', '')
+            if new_profile is not None:
+                profile_pic_path = save_uploaded_file(new_profile, "profile_pics")
+                c.execute("UPDATE users SET profile_pic=? WHERE id=?", (profile_pic_path, st.session_state.user_id))
+                conn.commit()
+            st.session_state.user_info['height'] = new_height if new_height > 0 else None
+            st.session_state.user_info['weight'] = new_weight if new_weight > 0 else None
+            st.session_state.user_info['age'] = new_age if new_age > 0 else None
+            st.session_state.user_info['gender'] = new_gender if new_gender != "" else None
+            st.session_state.preferred_diet = new_preferred_diet if new_preferred_diet != "" else "Not specified"
+            if profile_pic_path:
+                st.session_state.user_info['profile_pic'] = profile_pic_path
+            st.success("Profile updated successfully!")
+            try:
+                st.experimental_rerun()
+            except Exception:
+                st.stop()
 
-# TAB 4: Logout
-with tabs[4]:
-    st.header("Logout")
-    if st.button("Confirm Logout"):
-        st.session_state.logged_in = False
-        st.session_state.user_id = None
-        st.session_state.username = ""
-        st.session_state.user_info = {}
-        st.success("Logged out successfully!")
-        try:
-            st.experimental_rerun()
-        except Exception:
-            st.stop()
+    # TAB 4: Logout
+    with tabs[4]:
+        st.header("Logout")
+        if st.button("Confirm Logout"):
+            st.session_state.logged_in = False
+            st.session_state.user_id = None
+            st.session_state.username = ""
+            st.session_state.user_info = {}
+            st.session_state.preferred_diet = "Not specified"
+            st.success("Logged out successfully!")
+            try:
+                st.experimental_rerun()
+            except Exception:
+                st.stop()
