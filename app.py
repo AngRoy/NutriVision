@@ -15,9 +15,25 @@ import numpy as np
 st.markdown(
     """
     <style>
-    /* Main app container */
+    /* Starfield background */
+    #starfield {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: url('https://i.imgur.com/9z4xUO7.png') repeat;
+        animation: moveStars 120s linear infinite;
+        z-index: -2;
+        opacity: 0.3;
+    }
+    @keyframes moveStars {
+        from { background-position: 0 0; }
+        to { background-position: -10000px 5000px; }
+    }
+    /* Main container override */
     [data-testid="stAppViewContainer"] {
-        background: linear-gradient(135deg, #000000, #121212) !important;
+        background: #000000 !important;
     }
     /* Header styling */
     header {
@@ -29,27 +45,27 @@ st.markdown(
     }
     /* General text styling */
     body, .stMarkdown, .stMetric, .css-1aumxhk {
-        color: #B0BEC5 !important;
+        color: #E8EAF6 !important;
     }
     /* Tabs styling */
     .stTabs > div[role="tablist"] {
         background-color: #263238 !important;
-        border-bottom: 2px solid #37474F !important;
+        border-bottom: 2px solid #000000 !important;
     }
     .stTabs div[role="tab"] {
         font-size: 18px;
         font-weight: bold;
-        color: #B0BEC5 !important;
+        color: #E8EAF6 !important;
         padding: 10px !important;
         transition: background-color 0.3s ease !important;
     }
     .stTabs div[role="tab"]:hover {
         background-color: #37474F !important;
     }
-    /* Button styling */
+    /* Button styling - using bright red */
     .stButton>button {
-        background-color: #37474F !important;
-        color: #B0BEC5 !important;
+        background-color: #E53935 !important;
+        color: #FFFFFF !important;
         font-weight: bold !important;
         border: none !important;
         padding: 10px 20px !important;
@@ -57,28 +73,53 @@ st.markdown(
         transition: background-color 0.3s ease !important;
     }
     .stButton>button:hover {
-        background-color: #455A64 !important;
+        background-color: #EF5350 !important;
     }
     /* Input styling */
     .stNumberInput input, .stTextInput input, .stSelectbox select {
         background-color: #263238 !important;
-        color: #B0BEC5 !important;
+        color: #E8EAF6 !important;
         border: 1px solid #37474F !important;
     }
     /* File uploader styling */
     .stFileUploader {
         background-color: #263238 !important;
-        color: #B0BEC5 !important;
+        color: #E8EAF6 !important;
         border: 1px solid #37474F !important;
     }
     </style>
+    <div id="starfield"></div>
     """,
     unsafe_allow_html=True,
 )
 
 if "app_loaded" not in st.session_state:
-    with st.spinner("Loading application, please wait..."):
-        time.sleep(2)  # Simulate loading time
+    st.markdown(
+        """
+        <div class="loader"></div>
+        <style>
+        .loader {
+          border: 16px solid #444;
+          border-top: 16px solid #E53935;
+          border-radius: 50%;
+          width: 120px;
+          height: 120px;
+          animation: spin 2s linear infinite;
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          z-index: 9999;
+        }
+        @keyframes spin {
+          0% { transform: translate(-50%, -50%) rotate(0deg); }
+          100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    time.sleep(2)  # Simulate loading time
     st.session_state.app_loaded = True
 
 # -------------------------------
@@ -354,7 +395,7 @@ def registration_form():
             )
             if success:
                 st.success(msg)
-                # Auto-login after registration
+                # Auto-login after registration and rerun immediately
                 st.session_state.logged_in = True
                 st.session_state.user_id = new_user_id
                 st.session_state.username = reg_username
@@ -366,7 +407,10 @@ def registration_form():
                     "profile_pic": profile_pic_path
                 }
                 st.session_state.preferred_diet = reg_preferred_diet if reg_preferred_diet != "" else "Not specified"
-                st.experimental_rerun()
+                try:
+                    st.experimental_rerun()
+                except Exception:
+                    st.stop()
             else:
                 st.error(msg)
 
