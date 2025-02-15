@@ -454,6 +454,8 @@ with tabs[0]:
     st.metric("Today's Calorie Intake", f"{daily_cal:.2f} kcal")
     double_rerun()
     daily_data = get_all_daily_calories(st.session_state.user_id)
+    if st.button("Confirm Logout"):
+            daily_data = get_all_daily_calories(st.session_state.user_id)        
     if daily_data:
         try:
             import pandas as pd
