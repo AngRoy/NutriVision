@@ -571,7 +571,7 @@ with tabs[3]:
         st.markdown(
             f"""
             <div style="text-align: right;">
-                <img src="data:{mime_type};base64,{encoded_string}" style="max-height:30vh;"/>
+                <img src="data:{mime_type};base64,{encoded_string}" style="max-height:50vh;"/>
             </div>
             """,
             unsafe_allow_html=True,
