@@ -146,7 +146,9 @@ The web application is built using Streamlit and offers the following functional
    git clone https://github.com/yourusername/nutrivision.git
    cd nutrivision
 
-## Working Video
-1. **Watch the Working Video**
-    For a quick overview of NutriVision's features and functionalities, watch the 
-    [![Watch the video](https://img.youtube.com/vi/xkQKRyK41z8/maxresdefault.jpg)](https://www.youtube.com/watch?v=xkQKRyK41z8)
+## Watch the Working Video
+For a quick overview of NutriVision's features and functionalities, watch the 
+[![Watch the video](https://img.youtube.com/vi/xkQKRyK41z8/maxresdefault.jpg)](https://www.youtube.com/watch?v=xkQKRyK41z8)
+
+## Working Site
+You can access the live NutriVision web application at the following link: [NutriVision Live](https://angroy-nutrivision-app-vxxkzd.streamlit.app/)
