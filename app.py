@@ -391,14 +391,15 @@ def registration_form():
                     "profile_pic": profile_pic_path
                 }
                 st.session_state.preferred_diet = reg_preferred_diet if reg_preferred_diet != "" else "Not specified"
-                try:
-                    if hasattr(st, "experimental_rerun"):
-                        st.experimental_rerun()
-                    else:
-                        st.stop()
-                except Exception:
-                    st.error("Failed to reload app. Please refresh the page.")
-                    st.stop()
+                # try:
+                #     if hasattr(st, "experimental_rerun"):
+                #         st.experimental_rerun()
+                #     else:
+                #         st.stop()
+                # except Exception:
+                #     st.error("Failed to reload app. Please refresh the page.")
+                #     st.stop()
+                st.experimental_rerun()
             else:
                 st.error(msg)
 
@@ -598,11 +599,12 @@ with tabs[4]:
         st.session_state.user_info = {}
         st.session_state.preferred_diet = "Not specified"
         st.success("Logged out successfully!")
-        try:
-            if hasattr(st, "experimental_rerun"):
-                st.experimental_rerun()
-            else:
-                st.stop()
-        except Exception:
-            st.error("Failed to reload app. Please refresh the page.")
-            st.stop()
+        # try:
+        #     if hasattr(st, "experimental_rerun"):
+        #         st.experimental_rerun()
+        #     else:
+        #         st.stop()
+        # except Exception:
+        #     st.error("Failed to reload app. Please refresh the page.")
+        #     st.stop()
+        st.experimental_rerun()
