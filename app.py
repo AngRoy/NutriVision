@@ -44,20 +44,19 @@ st.markdown(
 # DATABASE SETUP & FUNCTIONS
 @st.cache_resource(show_spinner=False)
 def init_db():
-    # Connect to the database file
     conn = sqlite3.connect("nutrivision_app.db", check_same_thread=False)
     c = conn.cursor()
     
-    # Check if the "users" table exists and has the expected columns
+    # Check if the "users" table exists and has the expected columns.
     c.execute("PRAGMA table_info(users)")
     user_columns = [col[1] for col in c.fetchall()]
-    # If expected columns are missing, drop the table (for demo purposes)
-    if "height" not in user_columns or "profile_pic" not in user_columns:
+    if not user_columns or "height" not in user_columns or "profile_pic" not in user_columns:
         c.execute("DROP TABLE IF EXISTS users")
     
+    # Check if the "meals" table exists and has the expected column "meal_image"
     c.execute("PRAGMA table_info(meals)")
     meal_columns = [col[1] for col in c.fetchall()]
-    if "meal_image" not in meal_columns:
+    if not meal_columns or "meal_image" not in meal_columns:
         c.execute("DROP TABLE IF EXISTS meals")
     
     # Create tables with the desired schema
