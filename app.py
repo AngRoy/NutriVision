@@ -548,23 +548,32 @@ with tabs[2]:
 with tabs[3]:
     st.markdown("<h1 class='app-title'>Account Info</h1>", unsafe_allow_html=True)
     st.write(f"**Username**: {st.session_state.username}")
-    uinfo= st.session_state.user_info
-    if uinfo:
-        st.write(f"**Height**: {uinfo.get('height','N/A')} cm")
-        st.write(f"**Weight**: {uinfo.get('weight','N/A')} kg")
-        st.write(f"**Age**: {uinfo.get('age','N/A')}")
-        st.write(f"**Gender**: {uinfo.get('gender','N/A')}")
-        if uinfo.get('height') and uinfo.get('weight') and uinfo['height']>0:
-            bmi= uinfo['weight']/((uinfo['height']/100)**2)
-            st.write(f"**BMI**: {bmi:.2f}")
-        st.write(f"**Preferred Diet**: {st.session_state.preferred_diet}")
-        pic= uinfo.get("profile_pic","")
-        if pic and os.path.exists(pic):
-            st.image(pic, use_container_width=True)
-        else:
-            st.write("No profile picture.")
+    
+    uinfo = st.session_state.user_info
+    st.write(f"**Height**: {uinfo.get('height', 'N/A')} cm")
+    st.write(f"**Weight**: {uinfo.get('weight', 'N/A')} kg")
+    st.write(f"**Age**: {uinfo.get('age', 'N/A')}")
+    st.write(f"**Gender**: {uinfo.get('gender', 'N/A')}")
+    
+    if uinfo.get('height') and uinfo.get('weight') and uinfo['height'] > 0:
+        bmi = uinfo['weight'] / ((uinfo['height'] / 100) ** 2)
+        st.write(f"**BMI**: {bmi:.2f}")
+    
+    st.write(f"**Preferred Diet**: {st.session_state.preferred_diet}")
+    
+    pic = uinfo.get("profile_pic", "")
+    if pic and os.path.exists(pic):# Convert file path to absolute to ensure correct referencing.
+        abs_path = os.path.abspath(pic)# Insert the image with inline CSS to restrict max height and align it right.
+        st.markdown(
+            f"""
+            <div style="display: flex; justify-content: flex-end;">
+                <img src="file://{abs_path}" style="max-height: 30vh;"/>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
     else:
-        st.write("No user info available.")
+        st.write("No profile picture.")
     st.markdown("---")
     st.subheader("Update Profile")
     new_ht= st.number_input("Height (cm)", 0.0,300.0, step=0.1, value=float(uinfo.get('height') or 0))
