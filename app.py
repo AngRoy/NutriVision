@@ -10,21 +10,35 @@ from PIL import Image
 from transformers import CLIPProcessor, CLIPModel, BlipProcessor, BlipForConditionalGeneration
 import plotly.express as px
 import numpy as np
-from streamlit_autorefresh import st_autorefresh  # New package for auto-refresh
 
-# Helper: Force Rerun Function using st_autorefresh
-def force_rerun():
-    # Refresh the app once after 1 second.
-    st_autorefresh(interval=1000, limit=1, key="auto_refresh")
+# -------------------------------
+# Helper: Double Rerun Function
+# This injects JavaScript to reload the page twice in quick succession.
+# -------------------------------
+def double_rerun():
+    st.markdown("""
+    <script>
+    setTimeout(function(){
+      window.location.reload();
+      setTimeout(function(){
+        window.location.reload();
+      }, 50);
+    }, 100);
+    </script>
+    """, unsafe_allow_html=True)
 
-# PERSISTENT LOGIN: LOAD QUERY PARAMETERS
-# (Using st.query_params as recommended)
+# -------------------------------
+# PERSISTENT LOGIN: LOAD QUERY PARAMETERS (New API)
+# -------------------------------
 query_params = st.query_params
 if "user_id" in query_params and query_params["user_id"]:
     st.session_state.logged_in = True
     st.session_state.user_id = int(query_params["user_id"][0])
     st.session_state.username = query_params["username"][0] if "username" in query_params else ""
 
+# -------------------------------
+# FIXED HIGH-TECH DARK THEME WITH STARFIELD BACKGROUND
+# -------------------------------
 st.markdown(
     """
     <style>
@@ -106,7 +120,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# -------------------------------
 # ANIMATED, CENTERED LOADING SCREEN (Custom Spinner)
+# -------------------------------
 if "app_loaded" not in st.session_state:
     placeholder = st.empty()
     placeholder.markdown(
@@ -339,15 +355,10 @@ if "user_info" not in st.session_state:
     st.session_state.user_info = {}
 if "preferred_diet" not in st.session_state:
     st.session_state.preferred_diet = "Not specified"
-if "should_reload" not in st.session_state:
-    st.session_state.should_reload = False
-# Force reload
-if st.session_state.get("should_reload", False):
-    st.markdown("<script>window.location.reload();</script>", unsafe_allow_html=True)
-    st.session_state.should_reload = False
 
 # -------------------------------
 # USER AUTHENTICATION (Login/Registration)
+# Only show authentication forms if not logged in.
 # -------------------------------
 def login_form():
     st.subheader("Login")
@@ -412,9 +423,8 @@ def registration_form():
                     "profile_pic": profile_pic_path
                 }
                 st.session_state.preferred_diet = reg_preferred_diet if reg_preferred_diet != "" else "Not specified"
-                st_autorefresh(interval=1000, limit=1, key="register_refresh")
-                st.success("Registered successfully!")
-                st.session_state.should_reload = True
+                st.query_params = {"user_id": [str(new_user_id)], "username": [reg_username]}
+                double_rerun()
             else:
                 st.error(msg)
 
@@ -593,7 +603,7 @@ with tabs[3]:
         if profile_pic_path:
             st.session_state.user_info['profile_pic'] = profile_pic_path
         st.success("Profile updated successfully!")
-        force_rerun()
+        double_rerun()
 
 # -------------------------------
 # TAB 4: Logout
@@ -606,6 +616,6 @@ with tabs[4]:
         st.session_state.username = ""
         st.session_state.user_info = {}
         st.session_state.preferred_diet = "Not specified"
-        st_autorefresh(interval=1000, limit=1, key="logout_refresh")
-        st.success("Logged out successfully!")
-        st.session_state.should_reload = True
+        # Clear query parameters (if needed)
+        st.query_params = {}
+        double_rerun()
