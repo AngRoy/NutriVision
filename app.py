@@ -11,11 +11,12 @@ from transformers import CLIPProcessor, CLIPModel, BlipProcessor, BlipForConditi
 import plotly.express as px
 import numpy as np
 
-def safe_rerun():
-    try:
-        st.experimental_rerun()
-    except Exception as e:
-        st.error("Automatic reload failed. Please refresh the page manually.")
+# PERSISTENT LOGIN: LOAD QUERY PARAMETERS
+query_params = st.experimental_get_query_params()
+if "user_id" in query_params and query_params["user_id"]:
+    st.session_state.logged_in = True
+    st.session_state.user_id = int(query_params["user_id"][0])
+    st.session_state.username = query_params["username"][0] if "username" in query_params else ""
 
 st.markdown(
     """
@@ -98,6 +99,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# -------------------------------
+# ANIMATED, CENTERED LOADING SCREEN (Custom Spinner)
+# -------------------------------
 if "app_loaded" not in st.session_state:
     placeholder = st.empty()
     placeholder.markdown(
@@ -125,7 +129,7 @@ if "app_loaded" not in st.session_state:
         """,
         unsafe_allow_html=True
     )
-    time.sleep(2)  # Simulate loading time
+    time.sleep(2)
     st.session_state.app_loaded = True
     placeholder.empty()
 
@@ -333,6 +337,7 @@ if "preferred_diet" not in st.session_state:
 
 # -------------------------------
 # USER AUTHENTICATION (Login/Registration)
+# Only show authentication forms if not logged in.
 # -------------------------------
 def login_form():
     st.subheader("Login")
@@ -397,15 +402,8 @@ def registration_form():
                     "profile_pic": profile_pic_path
                 }
                 st.session_state.preferred_diet = reg_preferred_diet if reg_preferred_diet != "" else "Not specified"
-                # try:
-                #     if hasattr(st, "experimental_rerun"):
-                #         st.experimental_rerun()
-                #     else:
-                #         st.stop()
-                # except Exception:
-                #     st.error("Failed to reload app. Please refresh the page.")
-                #     st.stop()
-                safe_rerun()
+                st.experimental_set_query_params(user_id=str(new_user_id), username=reg_username)
+                st.experimental_rerun()
             else:
                 st.error(msg)
 
@@ -458,7 +456,7 @@ with tabs[1]:
     if uploaded_meal is not None:
         try:
             meal_image = Image.open(uploaded_meal).convert("RGB")
-            st.image(meal_image, caption="Uploaded Meal Image", use_column_width=True)
+            st.image(meal_image, caption="Uploaded Meal Image", use_container_width=True)
         except Exception as e:
             st.error(f"Error loading image: {e}")
         
@@ -584,14 +582,7 @@ with tabs[3]:
         if profile_pic_path:
             st.session_state.user_info['profile_pic'] = profile_pic_path
         st.success("Profile updated successfully!")
-        try:
-            if hasattr(st, "experimental_rerun"):
-                st.experimental_rerun()
-            else:
-                st.stop()
-        except Exception:
-            st.error("Failed to reload app. Please refresh the page.")
-            st.stop()
+        st.experimental_rerun()
 
 # -------------------------------
 # TAB 4: Logout
@@ -604,13 +595,5 @@ with tabs[4]:
         st.session_state.username = ""
         st.session_state.user_info = {}
         st.session_state.preferred_diet = "Not specified"
-        st.success("Logged out successfully!")
-        # try:
-        #     if hasattr(st, "experimental_rerun"):
-        #         st.experimental_rerun()
-        #     else:
-        #         st.stop()
-        # except Exception:
-        #     st.error("Failed to reload app. Please refresh the page.")
-        #     st.stop()
-        safe_rerun()
+        st.experimental_set_query_params()  # Clear query parameters
+        st.experimental_rerun()
