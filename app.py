@@ -562,15 +562,19 @@ with tabs[3]:
     st.write(f"**Preferred Diet**: {st.session_state.preferred_diet}")
     
     pic = uinfo.get("profile_pic", "")
-    if pic and os.path.exists(pic):# Convert file path to absolute to ensure correct referencing.
-        abs_path = os.path.abspath(pic)# Insert the image with inline CSS to restrict max height and align it right.
+    if pic and os.path.exists(pic):
+        with open(pic, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode()
+        ext = os.path.splitext(pic)[1].lower()
+        mime_type = "image/png" if ext == ".png" else "image/jpeg"
+        
         st.markdown(
             f"""
-            <div style="display: flex; justify-content: flex-end;">
-                <img src="file://{abs_path}" style="max-height: 30vh;"/>
+            <div style="text-align: right;">
+                <img src="data:{mime_type};base64,{encoded_string}" style="max-height:30vh;"/>
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
     else:
         st.write("No profile picture.")
