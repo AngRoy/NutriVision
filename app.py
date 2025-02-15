@@ -10,19 +10,28 @@ from PIL import Image
 from transformers import CLIPProcessor, CLIPModel, BlipProcessor, BlipForConditionalGeneration
 import plotly.express as px
 import numpy as np
+from streamlit_autorefresh import st_autorefresh  # New package for auto-refresh
 
-# Helper: Force Rerun Function (replacement for st.experimental_rerun)
+# -------------------------------
+# Helper: Force Rerun Function using st_autorefresh
+# -------------------------------
 def force_rerun():
-    from streamlit.runtime.scriptrunner.script_run_context import get_script_run_ctx
-    get_script_run_ctx().request_rerun()
+    # Refresh the app once after 1 second.
+    st_autorefresh(interval=1000, limit=1, key="auto_refresh")
 
+# -------------------------------
 # PERSISTENT LOGIN: LOAD QUERY PARAMETERS
-query_params = st.query_params  # Use new API
+# (Using st.query_params as recommended)
+# -------------------------------
+query_params = st.query_params
 if "user_id" in query_params and query_params["user_id"]:
     st.session_state.logged_in = True
     st.session_state.user_id = int(query_params["user_id"][0])
     st.session_state.username = query_params["username"][0] if "username" in query_params else ""
 
+# -------------------------------
+# FIXED HIGH-TECH DARK THEME WITH STARFIELD BACKGROUND
+# -------------------------------
 st.markdown(
     """
     <style>
@@ -104,7 +113,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# -------------------------------
 # ANIMATED, CENTERED LOADING SCREEN (Custom Spinner)
+# -------------------------------
 if "app_loaded" not in st.session_state:
     placeholder = st.empty()
     placeholder.markdown(
@@ -340,7 +351,6 @@ if "preferred_diet" not in st.session_state:
 
 # -------------------------------
 # USER AUTHENTICATION (Login/Registration)
-# Only show authentication forms if not logged in.
 # -------------------------------
 def login_form():
     st.subheader("Login")
@@ -405,8 +415,8 @@ def registration_form():
                     "profile_pic": profile_pic_path
                 }
                 st.session_state.preferred_diet = reg_preferred_diet if reg_preferred_diet != "" else "Not specified"
-                st.set_query_params(user_id=str(new_user_id), username=reg_username)
-                force_rerun()
+                st_autorefresh(interval=1000, limit=1, key="register_refresh")
+                st.success("Registered successfully!")
             else:
                 st.error(msg)
 
@@ -598,5 +608,5 @@ with tabs[4]:
         st.session_state.username = ""
         st.session_state.user_info = {}
         st.session_state.preferred_diet = "Not specified"
-        st.set_query_params()  # Clear query parameters
-        force_rerun()
+        st_autorefresh(interval=1000, limit=1, key="logout_refresh")
+        st.success("Logged out successfully!")
