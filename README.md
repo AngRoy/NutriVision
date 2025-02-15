@@ -149,5 +149,4 @@ The web application is built using Streamlit and offers the following functional
 ## Working Video
 1. **Watch the Working Video**
     For a quick overview of NutriVision's features and functionalities, watch the 
-    [![Watch the video](demo.png)](demo.mp4)
-.
+    [![Watch the video](https://img.youtube.com/vi/xkQKRyK41z8/maxresdefault.jpg)](https://www.youtube.com/watch?v=xkQKRyK41z8)
