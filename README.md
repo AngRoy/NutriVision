@@ -117,10 +117,6 @@ The web application is built using Streamlit and offers the following functional
      streamlit run app.py
      ```
 
-2. **Cloud Deployment**:  
-   - You can deploy this app on platforms such as [Streamlit Sharing](https://streamlit.io/sharing), [Heroku](https://heroku.com), or [AWS Elastic Beanstalk](https://aws.amazon.com/elasticbeanstalk/).
-   - Ensure that your repository includes a `requirements.txt` file with all necessary dependencies and that the checkpoint file is available (or instructions to download it).
-
 ## Database Schema
 
 ### `users` Table
@@ -149,3 +145,7 @@ The web application is built using Streamlit and offers the following functional
    ```bash
    git clone https://github.com/yourusername/nutrivision.git
    cd nutrivision
+
+## Working Video
+1. **Watch the Working Video**
+    For a quick overview of NutriVision's features and functionalities, watch the [working video](Demo.mp4).
