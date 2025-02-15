@@ -11,6 +11,12 @@ from transformers import CLIPProcessor, CLIPModel, BlipProcessor, BlipForConditi
 import plotly.express as px
 import numpy as np
 
+def safe_rerun():
+    try:
+        st.experimental_rerun()
+    except Exception as e:
+        st.error("Automatic reload failed. Please refresh the page manually.")
+
 st.markdown(
     """
     <style>
@@ -399,7 +405,7 @@ def registration_form():
                 # except Exception:
                 #     st.error("Failed to reload app. Please refresh the page.")
                 #     st.stop()
-                st.experimental_rerun()
+                safe_rerun()
             else:
                 st.error(msg)
 
@@ -607,4 +613,4 @@ with tabs[4]:
         # except Exception:
         #     st.error("Failed to reload app. Please refresh the page.")
         #     st.stop()
-        st.experimental_rerun()
+        safe_rerun()
