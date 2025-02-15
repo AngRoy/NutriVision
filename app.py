@@ -31,9 +31,9 @@ st.markdown(
         from { background-position: 0 0; }
         to { background-position: -10000px 5000px; }
     }
-    /* Main container override */
+    /* Main app container */
     [data-testid="stAppViewContainer"] {
-        background: #000000 !important;
+        background: linear-gradient(135deg, #000000, #121212) !important;
     }
     /* Header styling */
     header {
@@ -94,7 +94,8 @@ st.markdown(
 )
 
 if "app_loaded" not in st.session_state:
-    st.markdown(
+    placeholder = st.empty()
+    placeholder.markdown(
         """
         <div class="loader"></div>
         <style>
@@ -121,6 +122,7 @@ if "app_loaded" not in st.session_state:
     )
     time.sleep(2)  # Simulate loading time
     st.session_state.app_loaded = True
+    placeholder.empty()
 
 # -------------------------------
 # DATABASE SETUP & FUNCTIONS
@@ -395,7 +397,7 @@ def registration_form():
             )
             if success:
                 st.success(msg)
-                # Auto-login after registration and rerun immediately
+                # Auto-login after registration and immediate rerun
                 st.session_state.logged_in = True
                 st.session_state.user_id = new_user_id
                 st.session_state.username = reg_username
@@ -407,10 +409,7 @@ def registration_form():
                     "profile_pic": profile_pic_path
                 }
                 st.session_state.preferred_diet = reg_preferred_diet if reg_preferred_diet != "" else "Not specified"
-                try:
-                    st.experimental_rerun()
-                except Exception:
-                    st.stop()
+                st.experimental_rerun()
             else:
                 st.error(msg)
 
