@@ -12,72 +12,70 @@ from transformers import CLIPProcessor, CLIPModel, BlipProcessor, BlipForConditi
 import plotly.express as px
 import numpy as np
 
-# -------------------------------
-# THEME SETUP: DARK/LIGHT TOGGLE WITH PURPLE-BLUE HIGH TECH STYLE
-# -------------------------------
-def set_theme(theme_mode):
-    if theme_mode == "Dark":
-        st.markdown(
-            """
-            <style>
-            body {
-                background-color: #303F9F;
-                color: #FFFFFF;
-                font-family: 'Helvetica', sans-serif;
-            }
-            .stTabs > div[role="tablist"] {
-                background-color: #3F51B5;
-            }
-            .stTabs div[role="tab"] {
-                font-size: 18px;
-                font-weight: bold;
-                color: #FFFFFF;
-            }
-            .stTabs div[role="tab"]:hover {
-                background-color: #5C6BC0;
-            }
-            .stButton>button {
-                background-color: #5C6BC0;
-                color: #FFFFFF;
-                font-weight: bold;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:  # Light theme
-        st.markdown(
-            """
-            <style>
-            body {
-                background-color: #EDE7F6;
-                color: #3F51B5;
-                font-family: 'Helvetica', sans-serif;
-            }
-            .stTabs > div[role="tablist"] {
-                background-color: #9FA8DA;
-            }
-            .stTabs div[role="tab"] {
-                font-size: 18px;
-                font-weight: bold;
-                color: #3F51B5;
-            }
-            .stTabs div[role="tab"]:hover {
-                background-color: #C5CAE9;
-            }
-            .stButton>button {
-                background-color: #7986CB;
-                color: #FFFFFF;
-                font-weight: bold;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
+st.markdown(
+    """
+    <style>
+    /* Main app container */
+    [data-testid="stAppViewContainer"] {
+        background: linear-gradient(135deg, #000000, #121212) !important;
+    }
+    /* Header styling */
+    header {
+        background-color: #1F1F1F !important;
+    }
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background-color: #1F1F1F !important;
+    }
+    /* General text styling */
+    body, .stMarkdown, .stMetric, .css-1aumxhk {
+        color: #B0BEC5 !important;
+    }
+    /* Tabs styling */
+    .stTabs > div[role="tablist"] {
+        background-color: #263238 !important;
+        border-bottom: 2px solid #37474F !important;
+    }
+    .stTabs div[role="tab"] {
+        font-size: 18px;
+        font-weight: bold;
+        color: #B0BEC5 !important;
+        padding: 10px !important;
+        transition: background-color 0.3s ease !important;
+    }
+    .stTabs div[role="tab"]:hover {
+        background-color: #37474F !important;
+    }
+    /* Button styling */
+    .stButton>button {
+        background-color: #37474F !important;
+        color: #B0BEC5 !important;
+        font-weight: bold !important;
+        border: none !important;
+        padding: 10px 20px !important;
+        border-radius: 5px !important;
+        transition: background-color 0.3s ease !important;
+    }
+    .stButton>button:hover {
+        background-color: #455A64 !important;
+    }
+    /* Input styling */
+    .stNumberInput input, .stTextInput input, .stSelectbox select {
+        background-color: #263238 !important;
+        color: #B0BEC5 !important;
+        border: 1px solid #37474F !important;
+    }
+    /* File uploader styling */
+    .stFileUploader {
+        background-color: #263238 !important;
+        color: #B0BEC5 !important;
+        border: 1px solid #37474F !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-# -------------------------------
-# SPLASH SCREEN (LOADING)
-# -------------------------------
 if "app_loaded" not in st.session_state:
     with st.spinner("Loading application, please wait..."):
         time.sleep(2)  # Simulate loading time
@@ -274,7 +272,7 @@ def load_model():
     if os.path.exists(checkpoint_path):
         state_dict = torch.load(checkpoint_path, map_location=device)
         model.load_state_dict(state_dict)
-    # If checkpoint is missing, we silently load random weights.
+    # If checkpoint is missing, silently load random weights.
     model.eval()
     return model, device
 
@@ -299,12 +297,6 @@ if "user_info" not in st.session_state:
     st.session_state.user_info = {}
 if "preferred_diet" not in st.session_state:
     st.session_state.preferred_diet = "Not specified"
-
-# -------------------------------
-# THEME TOGGLE (Dark/Light) - in sidebar
-# -------------------------------
-theme_mode = st.sidebar.radio("Select Theme", ["Light", "Dark"])
-set_theme(theme_mode)
 
 # -------------------------------
 # USER AUTHENTICATION (Login/Registration)
@@ -362,7 +354,7 @@ def registration_form():
             )
             if success:
                 st.success(msg)
-                # Auto-login after successful registration
+                # Auto-login after registration
                 st.session_state.logged_in = True
                 st.session_state.user_id = new_user_id
                 st.session_state.username = reg_username
@@ -374,6 +366,7 @@ def registration_form():
                     "profile_pic": profile_pic_path
                 }
                 st.session_state.preferred_diet = reg_preferred_diet if reg_preferred_diet != "" else "Not specified"
+                st.experimental_rerun()
             else:
                 st.error(msg)
 
