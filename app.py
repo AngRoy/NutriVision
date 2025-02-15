@@ -12,14 +12,9 @@ import plotly.express as px
 from PIL import Image
 from transformers import CLIPProcessor, CLIPModel, BlipProcessor, BlipForConditionalGeneration
 
-# =============================
 # PAGE CONFIG & MOBILE FRIENDLY
-# =============================
 st.set_page_config(page_title="NutriVision", layout="wide")
 
-# =============================
-# STARFIELD THEME & CSS
-# =============================
 STARFIELD_CSS = """
 <style>
 /* Starfield background */
@@ -131,9 +126,7 @@ h3 {
 
 st.markdown(STARFIELD_CSS, unsafe_allow_html=True)
 
-# =============================
 # LOADING SCREEN ONCE
-# =============================
 if "loaded_once" not in st.session_state:
     spin = st.empty()
     spin.markdown("""
@@ -377,6 +370,7 @@ def show_login_form():
             }
             st.session_state.preferred_diet="Not specified"
             st.success("Logged in!")
+            st.button("Continue")
         else:
             st.error("Invalid credentials.")
 
@@ -421,6 +415,7 @@ def show_register_form():
                 st.session_state.preferred_diet= r_pd if r_pd else "Not specified"
                 st.query_params= {"user_id":[str(uid)], "username":[r_user]}
                 st.success("Registered & logged in!")
+                st.button("Continue")
             else:
                 st.error(msg)
 
@@ -616,3 +611,4 @@ with tabs[4]:
         st.query_params={}
         st.success("You have been logged out.")
         st.info("Go to the Login/Register toggle above to log in again or simply refresh.")
+        st.button("Continue")
