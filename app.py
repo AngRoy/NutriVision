@@ -13,14 +13,14 @@ from PIL import Image
 from transformers import CLIPProcessor, CLIPModel, BlipProcessor, BlipForConditionalGeneration
 
 # =============================
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # =============================
 st.set_page_config(page_title="NutriVision", layout="wide")
 
 # =============================
-# THEME & CSS (STARFIELD, LARGE TITLES, SMOOTH TRANSITIONS, IMAGE SIZING)
+# STARFIELD THEME & CSS
 # =============================
-THEME_CSS = """
+STARFIELD_CSS = """
 <style>
 /* Starfield background */
 #starfield {
@@ -50,11 +50,11 @@ header, [data-testid="stSidebar"] {
 body, .stMarkdown, .stMetric, .css-1aumxhk {
     color: #E8EAF6 !important;
 }
-/* Large titles */
+/* Larger titles & text */
 h1, .app-title {
     font-size: 2.5rem !important;
     text-align: center;
-    color: #FFFFFF !important;
+    color: #FFF !important;
     margin-top: 10px;
 }
 h2, .app-subtitle {
@@ -80,7 +80,7 @@ h3 {
 .stTabs div[role="tab"]:hover {
     background-color: #37474F !important;
 }
-/* Button styling */
+/* Buttons */
 .stButton>button {
     background-color: #E53935 !important;
     color: #FFF !important;
@@ -93,19 +93,19 @@ h3 {
 .stButton>button:hover {
     background-color: #EF5350 !important;
 }
-/* Input styling */
+/* Inputs */
 .stNumberInput input, .stTextInput input, .stSelectbox select {
     background-color: #263238 !important;
     color: #E8EAF6 !important;
     border: 1px solid #37474F !important;
 }
-/* File uploader styling */
+/* File uploader */
 .stFileUploader {
     background-color: #263238 !important;
     color: #E8EAF6 !important;
     border: 1px solid #37474F !important;
 }
-/* Image display: Upload tab (max-height 50% of viewport) */
+/* Smooth transitions for images */
 .upload-image img {
     max-height: 50vh;
     width: auto;
@@ -113,7 +113,6 @@ h3 {
     margin: 0 auto;
     transition: opacity 0.5s ease-in-out;
 }
-/* Image display: History tab (max-height 20% of viewport) */
 .history-image img {
     max-height: 20vh;
     width: auto;
@@ -124,14 +123,15 @@ h3 {
 </style>
 <div id="starfield"></div>
 """
-st.markdown(THEME_CSS, unsafe_allow_html=True)
+
+st.markdown(STARFIELD_CSS, unsafe_allow_html=True)
 
 # =============================
-# LOADING SPINNER (SHOW ONCE)
+# SHOW LOADING SCREEN ONCE
 # =============================
-if "has_loaded" not in st.session_state:
-    loader = st.empty()
-    loader.markdown("""
+if "loaded_once" not in st.session_state:
+    loader_spot = st.empty()
+    loader_spot.markdown("""
     <div class="loader"></div>
     <style>
     .loader {
@@ -154,11 +154,11 @@ if "has_loaded" not in st.session_state:
     </style>
     """, unsafe_allow_html=True)
     time.sleep(2)
-    loader.empty()
-    st.session_state.has_loaded = True
+    loader_spot.empty()
+    st.session_state.loaded_once = True
 
 # =============================
-# DATABASE SETUP & UTILS
+# DATABASE SETUP
 # =============================
 @st.cache_resource
 def init_db():
@@ -194,6 +194,9 @@ def init_db():
 
 conn = init_db()
 
+# =============================
+# DB HELPER FUNCTIONS
+# =============================
 def register_user(username, password, height, weight, age, gender, pic_path):
     c = conn.cursor()
     try:
@@ -214,19 +217,21 @@ def login_user(username, password):
     row = c.fetchone()
     return row[0] if row else None
 
-def store_meal(uid, source, caption, preds, cals, img_path):
+def store_meal(uid, src, cap, preds, cals, img_path):
     c = conn.cursor()
     c.execute("""
         INSERT INTO meals (user_id, meal_time, source, caption, predicted, calories, meal_image)
         VALUES (?,?,?,?,?,?,?)
-    """, (uid, datetime.datetime.now(), source, caption, json.dumps(preds), cals, img_path))
+    """, (uid, datetime.datetime.now(), src, cap, json.dumps(preds), cals, img_path))
     conn.commit()
 
 def get_meal_history(uid):
     c = conn.cursor()
     c.execute("""
-        SELECT meal_time, source, caption, predicted, calories, meal_image 
-        FROM meals WHERE user_id=? ORDER BY meal_time DESC
+        SELECT meal_time, source, caption, predicted, calories, meal_image
+        FROM meals
+        WHERE user_id=?
+        ORDER BY meal_time DESC
     """, (uid,))
     return c.fetchall()
 
@@ -242,7 +247,10 @@ def get_all_daily_cals(uid):
     c = conn.cursor()
     c.execute("""
         SELECT DATE(meal_time), SUM(calories)
-        FROM meals WHERE user_id=? GROUP BY DATE(meal_time) ORDER BY DATE(meal_time)
+        FROM meals
+        WHERE user_id=?
+        GROUP BY DATE(meal_time)
+        ORDER BY DATE(meal_time)
     """, (uid,))
     return c.fetchall()
 
@@ -255,176 +263,172 @@ def save_uploaded_file(upfile, folder):
     return path
 
 # =============================
-# MODEL DEFINITION
+# MODEL
 # =============================
 class NutriVisionNetMultiHead(nn.Module):
     def __init__(self, food_dim=3, fv_dim=9, fast_dim=8, device="cuda", fine_tune_clip=False):
         super().__init__()
         self.device = device
+        from transformers import CLIPProcessor, CLIPModel, BlipProcessor, BlipForConditionalGeneration
+        
         self.clip_proc = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-        self.clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        self.clip_model=CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         for p in self.clip_model.text_model.parameters():
-            p.requires_grad = False
+            p.requires_grad=False
         if not fine_tune_clip:
             for p in self.clip_model.vision_model.parameters():
-                p.requires_grad = False
+                p.requires_grad=False
 
-        self.blip_proc = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        self.blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+        self.blip_proc= BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        self.blip_model=BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
         for p in self.blip_model.parameters():
-            p.requires_grad = False
+            p.requires_grad=False
 
-        fuse_dim = 1024
-        hidden = 512
-        self.food_head = nn.Sequential(
+        fuse_dim=1024
+        hidden=512
+        self.food_head=nn.Sequential(
             nn.Linear(fuse_dim, hidden), nn.ReLU(), nn.Dropout(0.2), nn.Linear(hidden, food_dim)
         )
-        self.fv_head = nn.Sequential(
+        self.fv_head=nn.Sequential(
             nn.Linear(fuse_dim, hidden), nn.ReLU(), nn.Dropout(0.2), nn.Linear(hidden, fv_dim)
         )
-        self.fast_head = nn.Sequential(
+        self.fast_head=nn.Sequential(
             nn.Linear(fuse_dim, hidden), nn.ReLU(), nn.Dropout(0.2), nn.Linear(hidden, fast_dim)
         )
 
     def forward(self, img, source):
-        # Generate caption using BLIP
-        inputs = self.blip_proc(images=img, return_tensors="pt").to(self.device)
+        # BLIP caption
+        proc= self.blip_proc(images=img, return_tensors="pt").to(self.device)
         with torch.no_grad():
-            out_ids = self.blip_model.generate(**inputs, max_length=50, num_beams=5)
-        caption = self.blip_proc.decode(out_ids[0], skip_special_tokens=True)
-        # Obtain CLIP embeddings
-        img_inputs = self.clip_proc(images=img, return_tensors="pt").to(self.device)
-        img_emb = self.clip_model.get_image_features(**img_inputs)
-        txt_inputs = self.clip_proc(text=[caption], return_tensors="pt").to(self.device)
-        txt_emb = self.clip_model.get_text_features(**txt_inputs)
-        img_emb = img_emb / img_emb.norm(p=2, dim=-1, keepdim=True)
-        txt_emb = txt_emb / txt_emb.norm(p=2, dim=-1, keepdim=True)
-        fused = torch.cat([img_emb, txt_emb], dim=-1)
-        if source == "food_nutrition":
-            out = self.food_head(fused)
-        elif source == "fv":
-            out = self.fv_head(fused)
-        elif source == "fastfood":
-            out = self.fast_head(fused)
+            out_ids=self.blip_model.generate(**proc, max_length=50, num_beams=5)
+        caption=self.blip_proc.decode(out_ids[0], skip_special_tokens=True)
+
+        # CLIP embeddings
+        clip_in=self.clip_proc(images=img, return_tensors="pt").to(self.device)
+        img_emb=self.clip_model.get_image_features(**clip_in)
+        txt_in=self.clip_proc(text=[caption], return_tensors="pt").to(self.device)
+        txt_emb=self.clip_model.get_text_features(**txt_in)
+        img_emb= img_emb / img_emb.norm(p=2, dim=-1, keepdim=True)
+        txt_emb= txt_emb / txt_emb.norm(p=2, dim=-1, keepdim=True)
+        fused= torch.cat([img_emb, txt_emb], dim=-1)
+
+        if source=="food_nutrition":
+            out= self.food_head(fused)
+        elif source=="fv":
+            out= self.fv_head(fused)
+        elif source=="fastfood":
+            out= self.fast_head(fused)
         else:
             raise ValueError("Unknown source")
         return out.squeeze(0).cpu().numpy().tolist(), caption
 
 @st.cache_resource
 def load_model():
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
-    net = NutriVisionNetMultiHead(device=dev, fine_tune_clip=False).to(dev)
-    ckpt = "nutrivision_multihand.pt"
+    dev="cuda" if torch.cuda.is_available() else "cpu"
+    net= NutriVisionNetMultiHead(device=dev, fine_tune_clip=False).to(dev)
+    ckpt="nutrivision_multihand.pt"
     if os.path.exists(ckpt):
-        sd = torch.load(ckpt, map_location=dev)
+        sd= torch.load(ckpt, map_location=dev)
         net.load_state_dict(sd)
     net.eval()
     return net, dev
 
 def run_inference(img, source, net, dev):
     with torch.no_grad():
-        preds, cap = net(img, source)
-    cals = preds[0] if preds else 0
+        preds, cap= net(img, source)
+    cals= preds[0] if preds else 0
     return preds, cap, cals
 
 # =============================
-# SESSION STATE INITIALIZATION
+# SESSION STATE
 # =============================
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "user_id" not in st.session_state:
-    st.session_state.user_id = None
-if "username" not in st.session_state:
-    st.session_state.username = ""
-if "user_info" not in st.session_state:
-    st.session_state.user_info = {}
-if "preferred_diet" not in st.session_state:
-    st.session_state.preferred_diet = "Not specified"
+if "logged_in" not in st.session_state:  st.session_state.logged_in=False
+if "user_id" not in st.session_state:    st.session_state.user_id=None
+if "username" not in st.session_state:   st.session_state.username=""
+if "user_info" not in st.session_state:  st.session_state.user_info={}
+if "preferred_diet" not in st.session_state: st.session_state.preferred_diet="Not specified"
 
 # =============================
-# AUTHENTICATION FORMS
+# AUTH FORMS
 # =============================
 def login_form():
     st.markdown("<h1 class='app-title'>Login</h1>", unsafe_allow_html=True)
-    user = st.text_input("Username", key="login_user")
-    pw = st.text_input("Password", type="password", key="login_pw")
+    user= st.text_input("Username", key="login_user")
+    pw=   st.text_input("Password", type="password", key="login_pw")
     if st.button("Log In"):
-        uid = login_user(user, pw)
+        uid= login_user(user, pw)
         if uid:
-            st.session_state.logged_in = True
-            st.session_state.user_id = uid
-            st.session_state.username = user
-            c = conn.cursor()
+            st.session_state.logged_in=True
+            st.session_state.user_id=uid
+            st.session_state.username=user
+            c=conn.cursor()
             c.execute("SELECT height, weight, age, gender, profile_pic FROM users WHERE id=?", (uid,))
-            row = c.fetchone()
-            st.session_state.user_info = {
+            row=c.fetchone()
+            st.session_state.user_info={
                 "height": row[0],
                 "weight": row[1],
                 "age": row[2],
                 "gender": row[3],
                 "profile_pic": row[4]
             }
-            st.session_state.preferred_diet = "Not specified"
-            st.success("Logged in successfully!")
-            st.button("Continue")
+            st.session_state.preferred_diet="Not specified"
+            st.success("You are now logged in!")
         else:
             st.error("Invalid username or password.")
 
 def register_form():
     st.markdown("<h1 class='app-title'>Register</h1>", unsafe_allow_html=True)
-    r_user = st.text_input("Username", key="reg_user")
-    r_pw = st.text_input("Password", type="password", key="reg_pw")
-    r_h = st.number_input("Height (cm)", 0.0, 300.0, step=0.1, key="reg_h", value=0.0)
-    r_w = st.number_input("Weight (kg)", 0.0, 300.0, step=0.1, key="reg_w", value=0.0)
-    r_a = st.number_input("Age", 0, 120, step=1, key="reg_a", value=0)
-    r_g = st.selectbox("Gender", ["", "Male", "Female", "Other"], key="reg_g")
-    r_pd = st.text_input("Preferred Diet (optional)", key="reg_pd")
-    r_pic = st.file_uploader("Profile Picture (optional)", type=["jpg", "jpeg", "png"], key="reg_pic")
-    
+    r_user= st.text_input("Username", key="reg_user")
+    r_pw=   st.text_input("Password", type="password", key="reg_pw")
+    r_h=    st.number_input("Height (cm)", 0.0,300.0,step=0.1, key="reg_h", value=0.0)
+    r_w=    st.number_input("Weight (kg)", 0.0,300.0,step=0.1, key="reg_w", value=0.0)
+    r_a=    st.number_input("Age", 0,120,step=1, key="reg_a", value=0)
+    r_g=    st.selectbox("Gender",["","Male","Female","Other"], key="reg_g")
+    r_pd=   st.text_input("Preferred Diet (optional)", key="reg_pd")
+    r_pic=  st.file_uploader("Profile Picture (optional)", type=["jpg","jpeg","png"], key="reg_pic")
+
     if st.button("Register"):
-        pic_path = ""
+        pic_path=""
         if r_pic:
-            pic_path = save_uploaded_file(r_pic, "profile_pics")
-        if r_user == "" or r_pw == "":
+            pic_path= save_uploaded_file(r_pic,"profile_pics")
+        if r_user=="" or r_pw=="":
             st.error("Username & Password are required!")
         else:
-            succ, msg, uid = register_user(
+            succ,msg, uid= register_user(
                 r_user, r_pw,
-                r_h if r_h > 0 else None,
-                r_w if r_w > 0 else None,
-                r_a if r_a > 0 else None,
+                r_h if r_h>0 else None,
+                r_w if r_w>0 else None,
+                r_a if r_a>0 else None,
                 r_g if r_g else None,
                 pic_path
             )
             if succ:
                 st.success(msg)
-                st.session_state.logged_in = True
-                st.session_state.user_id = uid
-                st.session_state.username = r_user
-                st.session_state.user_info = {
-                    "height": r_h if r_h > 0 else None,
-                    "weight": r_w if r_w > 0 else None,
-                    "age": r_a if r_a > 0 else None,
+                st.session_state.logged_in=True
+                st.session_state.user_id=uid
+                st.session_state.username=r_user
+                st.session_state.user_info={
+                    "height": r_h if r_h>0 else None,
+                    "weight": r_w if r_w>0 else None,
+                    "age": r_a if r_a>0 else None,
                     "gender": r_g if r_g else None,
                     "profile_pic": pic_path
                 }
-                st.session_state.preferred_diet = r_pd if r_pd else "Not specified"
-                # Using new query_params API (assignment works)
-                st.query_params = {"user_id": [str(uid)], "username": [r_user]}
+                st.session_state.preferred_diet= r_pd if r_pd else "Not specified"
+                st.query_params= {"user_id":[str(uid)], "username":[r_user]}
                 st.success("Registered and logged in!")
-                st.button("Continue")
             else:
                 st.error(msg)
 
-# Show auth forms if not logged in
+# If not logged in, show minimal forms
 if not st.session_state.logged_in:
     st.markdown("<h1 class='app-title'>NutriVision</h1>", unsafe_allow_html=True)
-    st.write("Please log in or register:")
-    col1, col2 = st.columns(2)
-    with col1:
+    st.write("**Please log in or register:**")
+    colA, colB= st.columns(2)
+    with colA:
         st.markdown("### Login")
         login_form()
-    with col2:
+    with colB:
         st.markdown("### Register")
         register_form()
     st.stop()
@@ -432,24 +436,26 @@ if not st.session_state.logged_in:
 # =============================
 # MAIN TABS
 # =============================
-tabs = st.tabs(["Home", "Upload Meal", "Meal History", "Account", "Logout"])
+tabs= st.tabs(["Home","Upload Meal","Meal History","Account","Logout"])
 
 # ----------------------------
 # HOME TAB
 # ----------------------------
 with tabs[0]:
     st.markdown("<h1 class='app-title'>Dashboard</h1>", unsafe_allow_html=True)
-    st.write(f"Hello, {st.session_state.username}!")
-    today = datetime.date.today()
-    cals_today = get_daily_cals(st.session_state.user_id, today)
+    st.write(f"Hello, **{st.session_state.username}**!")
+    today= datetime.date.today()
+    cals_today= get_daily_cals(st.session_state.user_id, today)
     st.metric("Today's Calorie Intake", f"{cals_today:.2f} kcal")
+
     if st.button("Refresh Dashboard"):
         st.experimental_rerun()
-    all_cals = get_all_daily_cals(st.session_state.user_id)
-    if all_cals:
+
+    allcals= get_all_daily_cals(st.session_state.user_id)
+    if allcals:
         import pandas as pd
-        df = pd.DataFrame(all_cals, columns=["Date", "Calories"])
-        fig = px.line(df, x="Date", y="Calories", title="Daily Calorie Intake", markers=True)
+        df= pd.DataFrame(allcals, columns=["Date","Calories"])
+        fig= px.line(df, x="Date", y="Calories", title="Daily Calorie Intake", markers=True)
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.write("No meal records available.")
@@ -459,42 +465,41 @@ with tabs[0]:
 # ----------------------------
 with tabs[1]:
     st.markdown("<h1 class='app-title'>Upload a Meal</h1>", unsafe_allow_html=True)
-    st.write("Upload a meal image to analyze its nutritional content using AI.")
-    cat_map = {"Food Nutrition": "food_nutrition", "Fruits & Vegetables": "fv", "Fast Food": "fastfood"}
-    sel_cat = st.selectbox("Meal Category", list(cat_map.keys()))
-    source = cat_map[sel_cat]
-    up_meal = st.file_uploader("Choose a meal image", type=["jpg", "jpeg", "png"], key="meal_upload")
-    if up_meal:
+    st.write("Use the AI model to analyze your meal.")
+    cat_map= {"Food Nutrition":"food_nutrition","Fruits & Vegetables":"fv","Fast Food":"fastfood"}
+    sel_cat= st.selectbox("Meal Category", list(cat_map.keys()))
+    source= cat_map[sel_cat]
+
+    upfile= st.file_uploader("Choose a meal image", type=["jpg","jpeg","png"])
+    if upfile:
         try:
-            img = Image.open(up_meal).convert("RGB")
-            # Display image with 50% max height (using the CSS class)
-            buffered = io.BytesIO()
-            img.save(buffered, format="PNG")
-            img_b64 = base64.b64encode(buffered.getvalue()).decode()
-            st.markdown(f"<div class='upload-image'><img src='data:image/png;base64,{img_b64}'/></div>", unsafe_allow_html=True)
-        except Exception as e:
+            meal_img= Image.open(upfile).convert("RGB")
+            buffered= io.BytesIO()
+            meal_img.save(buffered, format="PNG")
+            b64= base64.b64encode(buffered.getvalue()).decode()
+            st.markdown(f"<div class='upload-image'><img src='data:image/png;base64,{b64}'/></div>", unsafe_allow_html=True)
+        except:
             st.error("Error loading image.")
         if st.button("Analyze Meal"):
             with st.spinner("Analyzing..."):
-                net, dev = load_model()
-                preds, cap, cals = run_inference(img, source, net, dev)
-            st.success("Analysis complete!")
+                net, dev= load_model()
+                preds, cap, cals= run_inference(meal_img, source, net, dev)
+            st.success("Inference complete!")
             st.write("**Caption**:", cap)
-            if source == "food_nutrition":
-                cols = ["Caloric Value", "Fat", "Carbohydrates"]
-            elif source == "fv":
-                cols = ["energy (kcal/kJ)", "water (g)", "protein (g)", "total fat (g)", "carbohydrates (g)", "fiber (g)", "sugars (g)", "calcium (mg)", "iron (mg)"]
+            if source=="food_nutrition":
+                cols= ["Caloric Value","Fat","Carbohydrates"]
+            elif source=="fv":
+                cols= ["energy (kcal/kJ)","water (g)","protein (g)","total fat (g)","carbohydrates (g)","fiber (g)","sugars (g)","calcium (mg)","iron (mg)"]
             else:
-                cols = ["calories", "cal_fat", "total_fat", "sat_fat", "trans_fat", "cholesterol", "sodium", "total_carb"]
+                cols= ["calories","cal_fat","total_fat","sat_fat","trans_fat","cholesterol","sodium","total_carb"]
             st.table({
                 "Nutrient": cols,
                 "Value": [round(x,2) for x in preds]
             })
-            st.write("**Predicted Calories**:", f"{cals:.2f} kcal")
-            path = save_uploaded_file(up_meal, "meal_images")
+            st.write("**Predicted Calories**:", f"{cals:.2f}")
+            path= save_uploaded_file(upfile, "meal_images")
             store_meal(st.session_state.user_id, source, cap, preds, cals, path)
-            st.success("Meal stored successfully!")
-            st.info("Switch to 'Meal History' or refresh the Dashboard to see updates.")
+            st.success("Meal saved!")
 
 # ----------------------------
 # MEAL HISTORY TAB
@@ -502,45 +507,42 @@ with tabs[1]:
 with tabs[2]:
     st.markdown("<h1 class='app-title'>Meal History</h1>", unsafe_allow_html=True)
     if st.session_state.user_id is None:
-        st.write("No user ID found. Please log in again.")
+        st.write("No user found. Please log in again.")
     else:
-        meals = get_meals(st.session_state.user_id)
-        if meals:
-            for m in meals:
-                m_time, src, cap, pred_str, cals, img_path = m
-                st.write(f"**Time**: {m_time} | **Category**: {src}")
-                if img_path and os.path.exists(img_path):
-                    # Display history image with 20% max height
-                    img_hist = Image.open(img_path)
-                    buffered = io.BytesIO()
-                    img_hist.save(buffered, format="PNG")
-                    img_b64 = base64.b64encode(buffered.getvalue()).decode()
-                    st.markdown(f"<div class='history-image'><img src='data:image/png;base64,{img_b64}'/></div>", unsafe_allow_html=True)
-                st.write(f"**Caption**: {cap}")
-                st.write(f"**Calories**: {cals:.2f}")
+        history= get_meal_history(st.session_state.user_id)
+        if history:
+            for meal_info in history:
+                meal_time, meal_src, meal_cap, meal_pred, meal_cal, meal_img_path= meal_info
+                st.write(f"**Time**: {meal_time}, **Category**: {meal_src}")
+                if meal_img_path and os.path.exists(meal_img_path):
+                    # show with 20% max height
+                    pic= Image.open(meal_img_path)
+                    buf= io.BytesIO()
+                    pic.save(buf, format="PNG")
+                    b64= base64.b64encode(buf.getvalue()).decode()
+                    st.markdown(f"<div class='history-image'><img src='data:image/png;base64,{b64}'/></div>", unsafe_allow_html=True)
+                st.write(f"**Caption**: {meal_cap}")
+                st.write(f"**Calories**: {meal_cal:.2f}")
                 try:
-                    arr = json.loads(pred_str)
-                    if src == "food_nutrition":
-                        cCols = ["Caloric Value", "Fat", "Carbohydrates"]
-                    elif src == "fv":
-                        cCols = ["energy (kcal/kJ)", "water (g)", "protein (g)", "total fat (g)", "carbohydrates (g)", "fiber (g)", "sugars (g)", "calcium (mg)", "iron (mg)"]
+                    arr= json.loads(meal_pred)
+                    if meal_src=="food_nutrition":
+                        columns= ["Caloric Value","Fat","Carbohydrates"]
+                    elif meal_src=="fv":
+                        columns= ["energy (kcal/kJ)","water (g)","protein (g)","total fat (g)","carbohydrates (g)","fiber (g)","sugars (g)","calcium (mg)","iron (mg)"]
                     else:
-                        cCols = ["calories", "cal_fat", "total_fat", "sat_fat", "trans_fat", "cholesterol", "sodium", "total_carb"]
-                    st.table({
-                        "Nutrient": cCols,
-                        "Value": [round(x,2) for x in arr]
-                    })
-                except Exception:
-                    st.write("Raw predictions:", pred_str)
+                        columns= ["calories","cal_fat","total_fat","sat_fat","trans_fat","cholesterol","sodium","total_carb"]
+                    st.table({"Nutrient": columns, "Value": [round(x,2) for x in arr]})
+                except:
+                    st.write("Raw predictions:", meal_pred)
                 st.markdown("---")
         else:
             st.write("No meals recorded yet.")
 
-        daily = get_all_daily_cals(st.session_state.user_id)
+        daily= get_all_daily_cals(st.session_state.user_id)
         if daily:
             import pandas as pd
-            df = pd.DataFrame(daily, columns=["Date", "Calories"])
-            fig = px.bar(df, x="Date", y="Calories", title="Daily Calorie Intake")
+            df= pd.DataFrame(daily, columns=["Date","Calories"])
+            fig= px.bar(df, x="Date", y="Calories", title="Daily Calorie Intake")
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.write("No daily data available.")
@@ -549,19 +551,19 @@ with tabs[2]:
 # ACCOUNT TAB
 # ----------------------------
 with tabs[3]:
-    st.markdown("<h1 class='app-title'>Account Information</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='app-title'>Account Info</h1>", unsafe_allow_html=True)
     st.write(f"**Username**: {st.session_state.username}")
-    ui = st.session_state.user_info
-    if ui:
-        st.write(f"**Height**: {ui.get('height','N/A')} cm")
-        st.write(f"**Weight**: {ui.get('weight','N/A')} kg")
-        st.write(f"**Age**: {ui.get('age','N/A')}")
-        st.write(f"**Gender**: {ui.get('gender','N/A')}")
-        if ui.get('height') and ui.get('weight') and ui.get('height') > 0:
-            bmi = ui.get('weight') / ((ui.get('height')/100)**2)
+    info= st.session_state.user_info
+    if info:
+        st.write(f"**Height**: {info.get('height','N/A')} cm")
+        st.write(f"**Weight**: {info.get('weight','N/A')} kg")
+        st.write(f"**Age**: {info.get('age','N/A')}")
+        st.write(f"**Gender**: {info.get('gender','N/A')}")
+        if info.get('height') and info.get('weight') and info['height']>0:
+            bmi= info['weight']/((info['height']/100)**2)
             st.write(f"**BMI**: {bmi:.2f}")
         st.write(f"**Preferred Diet**: {st.session_state.preferred_diet}")
-        pic = ui.get("profile_pic","")
+        pic= info.get("profile_pic","")
         if pic and os.path.exists(pic):
             st.image(pic, use_container_width=True)
         else:
@@ -570,29 +572,32 @@ with tabs[3]:
         st.write("No user info available.")
     st.markdown("---")
     st.subheader("Update Profile")
-    new_ht = st.number_input("Height (cm)", 0.0, 300.0, step=0.1, value=float(ui.get('height') or 0))
-    new_wt = st.number_input("Weight (kg)", 0.0, 300.0, step=0.1, value=float(ui.get('weight') or 0))
-    new_ag = st.number_input("Age", 0, 120, step=1, value=int(ui.get('age') or 0))
-    new_gd = st.selectbox("Gender", ["", "Male", "Female", "Other"], index=0 if not ui.get('gender') else ["", "Male", "Female", "Other"].index(ui.get('gender')))
-    new_pd = st.text_input("Preferred Diet", st.session_state.preferred_diet)
-    new_pic = st.file_uploader("Update Profile Picture", type=["jpg", "jpeg", "png"], key="upd_pic")
+    new_ht= st.number_input("Height (cm)", 0.0,300.0, step=0.1, value=float(info.get('height') or 0))
+    new_wt= st.number_input("Weight (kg)", 0.0,300.0, step=0.1, value=float(info.get('weight') or 0))
+    new_ag= st.number_input("Age", 0,120, step=1, value=int(info.get('age') or 0))
+    new_gd= st.selectbox("Gender", ["","Male","Female","Other"], index=0 if not info.get('gender') else ["","Male","Female","Other"].index(info.get('gender')))
+    new_pd= st.text_input("Preferred Diet", st.session_state.preferred_diet)
+    up_profile= st.file_uploader("Update Profile Picture", type=["jpg","jpeg","png"], key="upd_pic")
     if st.button("Save Profile"):
-        c = conn.cursor()
+        c= conn.cursor()
         c.execute("UPDATE users SET height=?, weight=?, age=?, gender=? WHERE id=?",
-                  (new_ht if new_ht > 0 else None, new_wt if new_wt > 0 else None, new_ag if new_ag > 0 else None, new_gd if new_gd else None, st.session_state.user_id))
+                  (new_ht if new_ht>0 else None,
+                   new_wt if new_wt>0 else None,
+                   new_ag if new_ag>0 else None,
+                   new_gd if new_gd else None,
+                   st.session_state.user_id))
         conn.commit()
-        pic_path = ui.get('profile_pic','')
-        if new_pic:
-            pic_path = save_file(new_pic, "profile_pics")
-            c.execute("UPDATE users SET profile_pic=? WHERE id=?", (pic_path, st.session_state.user_id))
+        old_path= info.get('profile_pic','')
+        if up_profile:
+            new_pic_path= save_uploaded_file(up_profile,"profile_pics")
+            c.execute("UPDATE users SET profile_pic=? WHERE id=?", (new_pic_path, st.session_state.user_id))
             conn.commit()
-        st.session_state.user_info['height'] = new_ht if new_ht > 0 else None
-        st.session_state.user_info['weight'] = new_wt if new_wt > 0 else None
-        st.session_state.user_info['age'] = new_ag if new_ag > 0 else None
-        st.session_state.user_info['gender'] = new_gd if new_gd else None
-        st.session_state.preferred_diet = new_pd if new_pd else "Not specified"
-        if pic_path:
-            st.session_state.user_info['profile_pic'] = pic_path
+            st.session_state.user_info['profile_pic']= new_pic_path
+        st.session_state.user_info['height']= new_ht if new_ht>0 else None
+        st.session_state.user_info['weight']= new_wt if new_wt>0 else None
+        st.session_state.user_info['age']= new_ag if new_ag>0 else None
+        st.session_state.user_info['gender']= new_gd if new_gd else None
+        st.session_state.preferred_diet= new_pd if new_pd else "Not specified"
         st.success("Profile updated successfully!")
 
 # ----------------------------
@@ -601,13 +606,13 @@ with tabs[3]:
 with tabs[4]:
     st.markdown("<h1 class='app-title'>Logout</h1>", unsafe_allow_html=True)
     if st.button("Confirm Logout"):
-        st.session_state.logged_in = False
-        st.session_state.user_id = None
-        st.session_state.username = ""
-        st.session_state.user_info = {}
-        st.session_state.preferred_diet = "Not specified"
-        # Clear query parameters using the new API by assigning an empty dict
-        st.query_params = {}
+        st.session_state.logged_in=False
+        st.session_state.user_id=None
+        st.session_state.username=""
+        st.session_state.user_info={}
+        st.session_state.preferred_diet="Not specified"
+        # Clear query params (new API)
+        st.query_params={}
         st.success("You have been logged out.")
-        if st.button("Exit NutriVision"):
+        if st.button("Go to Login"):
             st.experimental_rerun()
