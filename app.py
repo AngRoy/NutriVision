@@ -11,8 +11,13 @@ from transformers import CLIPProcessor, CLIPModel, BlipProcessor, BlipForConditi
 import plotly.express as px
 import numpy as np
 
+# Helper: Force Rerun Function (replacement for st.experimental_rerun)
+def force_rerun():
+    from streamlit.runtime.scriptrunner.script_run_context import get_script_run_ctx
+    get_script_run_ctx().request_rerun()
+
 # PERSISTENT LOGIN: LOAD QUERY PARAMETERS
-query_params = st.experimental_get_query_params()
+query_params = st.query_params  # Use new API
 if "user_id" in query_params and query_params["user_id"]:
     st.session_state.logged_in = True
     st.session_state.user_id = int(query_params["user_id"][0])
@@ -99,9 +104,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# -------------------------------
 # ANIMATED, CENTERED LOADING SCREEN (Custom Spinner)
-# -------------------------------
 if "app_loaded" not in st.session_state:
     placeholder = st.empty()
     placeholder.markdown(
@@ -402,8 +405,8 @@ def registration_form():
                     "profile_pic": profile_pic_path
                 }
                 st.session_state.preferred_diet = reg_preferred_diet if reg_preferred_diet != "" else "Not specified"
-                st.experimental_set_query_params(user_id=str(new_user_id), username=reg_username)
-                st.experimental_rerun()
+                st.set_query_params(user_id=str(new_user_id), username=reg_username)
+                force_rerun()
             else:
                 st.error(msg)
 
@@ -582,7 +585,7 @@ with tabs[3]:
         if profile_pic_path:
             st.session_state.user_info['profile_pic'] = profile_pic_path
         st.success("Profile updated successfully!")
-        st.experimental_rerun()
+        force_rerun()
 
 # -------------------------------
 # TAB 4: Logout
@@ -595,5 +598,5 @@ with tabs[4]:
         st.session_state.username = ""
         st.session_state.user_info = {}
         st.session_state.preferred_diet = "Not specified"
-        st.experimental_set_query_params()  # Clear query parameters
-        st.experimental_rerun()
+        st.set_query_params()  # Clear query parameters
+        force_rerun()
