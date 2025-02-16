@@ -8,3 +8,8 @@ tqdm
 pandas
 numpy
 streamlit-autorefresh
+huggingface_hub
+opencv-python
+opencv-python-headless
+ultralytics
+huggingface-hub
