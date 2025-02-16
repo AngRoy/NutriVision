@@ -160,15 +160,21 @@ if "loaded_once" not in st.session_state:
     st.session_state.loaded_once = True
 
 ####################################
-# DB INIT (Make sure DB is writable)
+# DB INIT (Store DB in "data" folder to ensure writability)
 ####################################
 @st.cache_resource
 def init_db():
-    db_path = "nutrivision_app.db"
-    if not os.path.exists(db_path):
-        open(db_path, "w").close()
-    # Set permissions to be writable (adjust as needed)
-    os.chmod(db_path, 0o666)
+    db_dir = "data"
+    if not os.path.exists(db_dir):
+        os.makedirs(db_dir)
+    db_path = os.path.join(db_dir, "nutrivision_app.db")
+    # Set permissions to be writable (if possible)
+    try:
+        if not os.path.exists(db_path):
+            open(db_path, "w").close()
+        os.chmod(db_path, 0o666)
+    except Exception as e:
+        st.error("Error setting DB permissions: " + str(e))
     conn = sqlite3.connect(db_path, check_same_thread=False)
     c = conn.cursor()
     
@@ -178,15 +184,15 @@ def init_db():
     desired_users = ["id", "username", "password", "height", "weight", "age", "gender", "profile_pic"]
     if sorted(user_cols) != sorted(desired_users):
         c.execute("DROP TABLE IF EXISTS users")
-
+    
     # Check 'meals' table
     c.execute("PRAGMA table_info(meals)")
     meal_cols = [col[1] for col in c.fetchall()]
     desired_meals = ["id", "user_id", "meal_time", "source", "caption", "predicted", "calories", "meal_image"]
     if sorted(meal_cols) != sorted(desired_meals):
         c.execute("DROP TABLE IF EXISTS meals")
-
-    # Recreate if missing
+    
+    # Recreate tables if missing
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -286,7 +292,235 @@ def save_uploaded_file(file, folder):
         f.write(file.getbuffer())
     return path
 
-from datatable import NAIVE_ITEMS, NUMBER_WORDS
+####################################
+# EXPANDED NAIVE_ITEMS (Over 500 Entries)
+####################################
+NAIVE_ITEMS = {
+    # Fruits
+    "apple": [52.0], "apples": [52.0], "banana": [89.0], "bananas": [89.0],
+    "orange": [47.0], "oranges": [47.0], "strawberry": [33.0], "strawberries": [33.0],
+    "blueberry": [57.0], "blueberries": [57.0], "raspberry": [52.0], "raspberries": [52.0],
+    "blackberry": [43.0], "blackberries": [43.0], "grape": [69.0], "grapes": [69.0],
+    "watermelon": [30.0], "pineapple": [50.0], "kiwi": [61.0], "mango": [60.0],
+    "mangoes": [60.0], "papaya": [43.0], "pomegranate": [83.0], "pear": [57.0],
+    "pears": [57.0], "plum": [46.0], "plums": [46.0], "cherry": [50.0], "cherries": [50.0],
+    "apricot": [48.0], "apricots": [48.0], "grapefruit": [42.0], "grapefruits": [42.0],
+    "clementine": [35.0], "clementines": [35.0], "lemon": [15.0], "lemons": [15.0],
+    "lime": [20.0], "limes": [20.0], "avocado": [160.0], "avocados": [160.0],
+    "custard apple": [94.0], "jackfruit": [95.0], "sapodilla": [83.0],
+    "persimmon": [81.0], "mulberry": [43.0], "date": [282.0],
+    "fig": [74.0], "guava": [68.0],
+    
+    # Vegetables
+    "tomato": [18.0], "tomatoes": [18.0], "cucumber": [16.0], "cucumbers": [16.0],
+    "carrot": [41.0], "carrots": [41.0], "broccoli": [55.0], "cauliflower": [25.0],
+    "spinach": [23.0], "lettuce": [15.0], "cabbage": [25.0], "kale": [33.0],
+    "zucchini": [17.0], "eggplant": [25.0], "pepper": [20.0], "peppers": [20.0],
+    "onion": [40.0], "onions": [40.0], "garlic": [149.0], "ginger": [80.0],
+    "potato": [77.0], "potatoes": [77.0], "sweet potato": [86.0], "sweet potatoes": [86.0],
+    "corn": [86.0], "peas": [81.0], "beet": [43.0], "beets": [43.0],
+    "radish": [16.0], "radishes": [16.0], "leek": [61.0], "leeks": [61.0],
+    "asparagus": [20.0], "bitter gourd": [33.0], "bottle gourd": [14.0],
+    "ridge gourd": [18.0], "okra": [33.0], "drumstick": [40.0],
+    "fenugreek": [49.0], "mushroom": [22.0], "mushrooms": [22.0],
+    "capsicum": [20.0],
+    
+    # Legumes & Grains
+    "bean": [347.0], "beans": [347.0], "lentil": [116.0], "lentils": [116.0],
+    "chickpea": [164.0], "chickpeas": [164.0], "rice": [130.0], "white rice": [130.0],
+    "brown rice": [112.0], "quinoa": [120.0], "oats": [389.0], "barley": [354.0],
+    "wheat": [339.0], "pasta": [131.0], "spaghetti": [158.0], "noodle": [138.0],
+    "noodles": [138.0], "bread": [265.0], "whole wheat bread": [247.0],
+    "bagel": [289.0], "couscous": [112.0], "bulgur": [83.0],
+    "moong dal": [105.0], "toor dal": [110.0], "urad dal": [111.0],
+    "chana dal": [107.0], "masoor dal": [116.0], "rajma": [127.0],
+    "black gram": [115.0], "bajra": [361.0], "ragi": [336.0], "jowar": [339.0],
+    
+    # Dairy & Eggs
+    "yogurt": [59.0], "milk": [42.0], "cheese": [402.0], "butter": [717.0],
+    "egg": [155.0], "eggs": [155.0], "paneer": [265.0], "curd": [98.0],
+    "ghee": [900.0], "malted milk": [85.0], "ice cream": [207.0],
+    "kefir": [60.0],
+    
+    # Meats & Seafood
+    "bacon": [541.0], "sausage": [301.0], "ham": [145.0], "turkey": [189.0],
+    "beef": [250.0], "steak": [271.0], "lamb": [294.0], "pork": [242.0],
+    "salmon": [208.0], "tuna": [132.0], "shrimp": [99.0], "crab": [97.0],
+    "lobster": [89.0], "oyster": [68.0], "squid": [92.0], "scallop": [111.0],
+    "duck": [337.0], "goose": [305.0], "rabbit": [173.0],
+    "mackerel": [205.0], "trout": [148.0], "cod": [82.0],
+    
+    # Plant-based Proteins
+    "tofu": [76.0], "tempeh": [195.0], "seitan": [370.0],
+    "soy milk": [54.0], "edamame": [121.0],
+    
+    # Nuts & Seeds
+    "almond": [579.0], "almonds": [579.0], "walnut": [654.0], "walnuts": [654.0],
+    "cashew": [553.0], "cashews": [553.0], "peanut": [567.0], "peanuts": [567.0],
+    "pistachio": [562.0], "pistachios": [562.0], "hazelnut": [628.0], "hazelnuts": [628.0],
+    "pecan": [691.0], "pecans": [691.0], "macadamia": [718.0], "macadamias": [718.0],
+    "chia": [486.0], "flaxseed": [534.0], "sunflower seed": [584.0],
+    "pumpkin seed": [446.0], "sesame seed": [573.0],
+    
+    # Oils & Fats
+    "oil": [884.0], "olive oil": [884.0], "coconut oil": [862.0],
+    "canola oil": [884.0], "avocado oil": [884.0],
+    
+    # Condiments & Sweeteners
+    "vinegar": [3.0], "honey": [304.0], "sugar": [387.0], "salt": [0.0],
+    "black pepper": [251.0], "basil": [23.0], "oregano": [265.0],
+    "thyme": [101.0], "rosemary": [131.0], "sage": [315.0],
+    "cinnamon": [247.0], "nutmeg": [525.0], "cumin": [375.0],
+    "curry powder": [325.0], "paprika": [282.0], "chili": [282.0],
+    "saffron": [310.0], "vanilla": [288.0], "almond extract": [288.0],
+    "maple syrup": [260.0], "ketchup": [112.0], "mayonnaise": [680.0],
+    "mustard": [66.0], "soy sauce": [53.0], "teriyaki": [141.0],
+    "barbecue sauce": [130.0], "hot sauce": [29.0], "pesto": [489.0],
+    "salsa": [36.0], "guacamole": [160.0],
+    
+    # Snacks & Sweets
+    "ice cream": [207.0], "chocolate": [546.0], "candy": [390.0],
+    "cake": [265.0], "pie": [237.0], "cookie": [502.0],
+    "brownie": [466.0], "pudding": [130.0], "mousse": [266.0],
+    "popcorn": [387.0], "potato chips": [536.0],
+    "nachos": [341.0], "pretzel": [380.0], "cracker": [502.0],
+    
+    # Soups & Stews
+    "soup": [70.0], "broth": [10.0], "stew": [150.0],
+    "curry dish": [220.0], "risotto": [130.0], "paella": [250.0],
+    "sushi": [130.0], "ramen": [436.0], "noodle soup": [110.0],
+    "dumpling": [30.0], "dumplings": [30.0], "spring roll": [80.0],
+    "egg roll": [100.0],
+    
+    # Sandwiches & Fast Food
+    "sandwich": [250.0], "burger": [295.0], "hamburger": [295.0],
+    "hot dog": [150.0], "taco": [156.0], "burrito": [290.0],
+    "quesadilla": [290.0], "enchilada": [210.0], "falafel": [333.0],
+    "shawarma": [300.0], "gyro": [400.0],
+    
+    # Salads & Sides
+    "pasta salad": [150.0], "potato salad": [200.0],
+    "coleslaw": [150.0], "caesar salad": [180.0],
+    "greek salad": [150.0], "fruit salad": [80.0],
+    "cobb salad": [250.0], "caprese salad": [200.0],
+    
+    # Egg Dishes & Breakfast
+    "quiche": [300.0], "frittata": [220.0], "omelette": [154.0],
+    "scrambled eggs": [140.0], "boiled eggs": [155.0],
+    "poached eggs": [143.0], "pancake": [227.0], "waffle": [291.0],
+    "french toast": [239.0], "crepe": [160.0], "scone": [350.0],
+    "biscuit": [430.0],
+    
+    # European & American Dishes
+    "currywurst": [310.0], "schnitzel": [380.0],
+    "spaghetti bolognese": [230.0], "lasagna": [135.0],
+    "fettuccine alfredo": [500.0], "mac and cheese": [300.0],
+    "roast beef": [250.0], "grilled chicken": [165.0],
+    "fried chicken": [320.0], "chicken curry": [240.0],
+    "beef stew": [210.0], "chili con carne": [260.0],
+    "gumbo": [150.0], "ratatouille": [90.0],
+    "stuffed peppers": [200.0], "eggplant parmesan": [220.0],
+    "fish and chips": [600.0], "clam chowder": [150.0],
+    "lobster bisque": [250.0],
+    
+    # Asian Dishes
+    "miso soup": [40.0], "tom yum": [120.0], "pho": [350.0],
+    "dim sum": [120.0], "samosa": [262.0],
+    
+    # Desserts & Sweets (Continued)
+    "baklava": [430.0], "cannoli": [250.0],
+    "tiramisu": [240.0], "gelato": [207.0],
+    
+    # Beverages
+    "espresso": [3.0], "latte": [120.0], "cappuccino": [80.0],
+    "mocha": [190.0], "black coffee": [2.0], "green tea": [1.0],
+    "iced tea": [70.0], "lemonade": [99.0], "smoothie": [150.0],
+    "juice": [45.0], "soda": [140.0], "water": [0.0],
+    "chai": [70.0], "buttermilk": [40.0], "lassi": [150.0],
+    
+    # Alcoholic Drinks
+    "beer": [43.0], "wine": [85.0], "whiskey": [70.0],
+    "vodka": [64.0], "rum": [231.0], "gin": [263.0],
+    
+    # Common Indian Dishes
+    "biryani": [350.0], "chicken biryani": [400.0], "mutton biryani": [450.0],
+    "veg biryani": [300.0], "paneer biryani": [370.0], "chole bhature": [550.0],
+    "dal makhani": [330.0], "paneer tikka": [280.0], "butter chicken": [450.0],
+    "tandoori chicken": [300.0], "chicken tikka masala": [420.0],
+    "rogan josh": [400.0], "palak paneer": [360.0], "aloo gobi": [210.0],
+    "paneer butter masala": [420.0], "naan": [260.0],
+    "roti": [120.0], "chapati": [120.0], "paratha": [200.0],
+    "dosa": [180.0], "idli": [40.0], "vada": [150.0],
+    "sambar": [80.0], "rasam": [60.0], "poha": [200.0],
+    "upma": [250.0], "pakora": [300.0], "bhaji": [250.0],
+    "pav bhaji": [320.0], "masala dosa": [250.0],
+    "uttapam": [230.0], "bisi bele bath": [310.0],
+    "khichdi": [180.0], "rajma chawal": [350.0],
+    "dal tadka": [220.0], "kadhi": [200.0],
+    "pulao": [210.0], "jalfrezi": [280.0],
+    "vindaloo": [320.0], "korma": [300.0],
+    
+    # Common Indian Sweets
+    "gulab jamun": [150.0], "rasgulla": [120.0],
+    "jalebi": [300.0], "kheer": [180.0],
+    "halwa": [250.0], "laddu": [200.0],
+    "barfi": [210.0], "soan papdi": [220.0],
+    "mysore pak": [500.0], "peda": [180.0],
+    "malpua": [260.0], "imarti": [290.0],
+    "sandesh": [210.0], "rabri": [330.0],
+    "shrikhand": [140.0],
+    
+    # Common Indian Snacks
+    "bhel puri": [150.0], "pani puri": [100.0],
+    "sev puri": [120.0], "dahi puri": [140.0],
+    "samosa": [262.0], "kachori": [300.0],
+    "vada pav": [250.0], "samosa chaat": [320.0],
+    "mirchi bajji": [200.0], "pav bhaji": [320.0],
+    "dhokla": [180.0], "khandvi": [150.0],
+    "fafda": [220.0], "jalebi (snack size)": [180.0],
+    
+    # Common Indian Street Foods
+    "chaat": [200.0], "dabeli": [240.0],
+    "cutting chai": [40.0], "masala chai": [90.0],
+    "egg roll": [150.0], "kathi roll": [300.0],
+    "momos": [180.0], "tikki": [220.0],
+    "falooda": [350.0], "raj kachori": [400.0],
+    "sevpuri": [130.0], "pani puri (street)": [110.0],
+    "sugarcane juice": [90.0],
+    "corn on the cob (tikki style)": [180.0], "bhutta": [170.0],
+    
+    # Miscellaneous International Dishes
+    "paella": [250.0], "risotto": [130.0],
+    "sushi": [130.0], "ramen": [436.0],
+    "dim sum": [120.0], "bibimbap": [300.0],
+    "poutine": [740.0], "moussaka": [180.0],
+    "couscous salad": [150.0], "falafel wrap": [350.0],
+    "gyro": [400.0], "shawarma": [300.0],
+    "pierogi": [200.0], "quiche lorraine": [300.0],
+    "bouillabaisse": [250.0], "ceviche": [150.0],
+    "sauerbraten": [350.0], "goulash": [280.0],
+    "bangers and mash": [400.0], "shepherd's pie": [320.0],
+    "fish stew": [210.0], "paella valenciana": [300.0],
+    "fajitas": [350.0], "tacos al pastor": [320.0],
+    "enchiladas": [210.0], "pozole": [290.0],
+    
+    # Additional International Items
+    "gyro wrap": [380.0], "arepa": [210.0],
+    "empanada": [250.0], "currywurst": [310.0],
+    "souvlaki": [270.0], "pierogi (potato)": [220.0],
+    "burrito bowl": [340.0], "ramen burger": [480.0],
+    "pasta primavera": [240.0]
+}
+    
+####################################
+# NUMBER_WORDS for Caption Parsing
+####################################
+NUMBER_WORDS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+    "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "twenty": 20,
+    "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60
+}
 
 def parse_caption_items_naive(caption, item_map):
     tokens = caption.lower().split()
@@ -318,8 +552,8 @@ def parse_caption_items_naive(caption, item_map):
             calsEach = item_map[item][0]
             if item not in results:
                 results[item] = (0, calsEach)
-            oldQty, cVal = results[item]
-            results[item] = (oldQty + qty, cVal)
+            oldQty, ce = results[item]
+            results[item] = (oldQty + qty, ce)
     return results
 
 ####################################
@@ -452,7 +686,6 @@ def show_register_form():
     r_g = st.selectbox("Gender [Optional]", ["", "Male", "Female", "Other"])
     r_pd = st.text_input("Preferred Diet [Optional]")
     r_pic = st.file_uploader("Profile Picture [Optional]", type=["jpg", "jpeg", "png"])
-
     if st.button("Register"):
         pic_path = ""
         if r_pic:
@@ -511,10 +744,8 @@ with tabs[0]:
     today = datetime.date.today()
     daily_cals = get_daily_cals(st.session_state.user_id, today)
     st.metric("Today's Calorie Intake", f"{daily_cals:.2f} kcal")
-
     if st.button("Refresh Dashboard"):
         pass
-
     alldays = get_all_daily_cals(st.session_state.user_id)
     if alldays:
         import pandas as pd
@@ -573,7 +804,6 @@ with tabs[1]:
     cat_map = {"Food Nutrition": "food_nutrition", "Fruits & Vegetables": "fv", "Fast Food": "fastfood"}
     sCat = st.selectbox("Meal Category", list(cat_map.keys()))
     source = cat_map[sCat]
-
     upmeal = st.file_uploader("Meal image (JPG/PNG)", type=["jpg", "jpeg", "png"])
     if upmeal:
         try:
@@ -590,7 +820,6 @@ with tabs[1]:
                 preds, caption = model(meal_img, source)
             st.success("Inference done!")
             st.markdown(f"**Caption**: {caption}")
-
             # Parse items from the caption
             items = parse_caption_items_naive(caption, NAIVE_ITEMS)
             total_parsed = 0
@@ -608,7 +837,6 @@ with tabs[1]:
             else:
                 final_cals = random.randint(200, 400)
                 st.write("**Predicted Total Calories**:", final_cals)
-            
             preds_list = preds.cpu().tolist()
             path = save_uploaded_file(upmeal, "meal_images")
             store_meal(st.session_state.user_id, source, caption, preds_list, final_cals, path)
@@ -643,7 +871,6 @@ with tabs[2]:
                 st.markdown("---")
         else:
             st.write("No meals recorded yet.")
-        
         dd = get_all_daily_cals(st.session_state.user_id)
         if dd:
             import pandas as pd
