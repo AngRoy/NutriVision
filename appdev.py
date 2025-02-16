@@ -611,7 +611,7 @@ with tabs[1]:
             st.success("Inference done!")
             st.markdown(f"**Caption**: {caption}")
 
-            # Let's parse items from the caption, no technical tensor
+            # Parse items from the caption
             items= parse_caption_items_naive(caption, NAIVE_ITEMS)
             total_parsed=0
             trows=[]
@@ -627,18 +627,9 @@ with tabs[1]:
             else:
                 st.write("No recognized items in the caption or no quantity found.")
 
-            # For the model's numeric output, we do not show the raw tensor
-            # We'll assume index[0] is "calories" if you prefer
-            if len(preds)>0:
-                model_cal= float(preds[0][0].item())
-                st.write("**AI Calories** (regression head):", f"{model_cal:.2f}")
-            else:
-                model_cal=0
+            # Use the Parsed Items Total for storage (remove regression head output)
+            final_cals = total_parsed
             
-            # We'll pick final_cals as either the item parse or the model's
-            # Here we just pick the model's. Or you can combine them, up to you.
-            final_cals= model_cal
-
             # Store in DB
             path= save_uploaded_file(upmeal,"meal_images")
             store_meal(st.session_state.user_id, source, caption, preds.tolist(), final_cals, path)
