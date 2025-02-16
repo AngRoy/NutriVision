@@ -160,26 +160,29 @@ if "loaded_once" not in st.session_state:
     st.session_state.loaded_once = True
 
 ####################################
-# DB INIT
+# DB INIT (Make sure DB is writable)
 ####################################
-import sqlite3
-
 @st.cache_resource
 def init_db():
-    conn = sqlite3.connect("nutrivision_app.db", check_same_thread=False)
+    db_path = "nutrivision_app.db"
+    if not os.path.exists(db_path):
+        open(db_path, "w").close()
+    # Set permissions to be writable (adjust as needed)
+    os.chmod(db_path, 0o666)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     c = conn.cursor()
     
     # Check 'users' table
     c.execute("PRAGMA table_info(users)")
     user_cols = [col[1] for col in c.fetchall()]
-    desired_users = ["id","username","password","height","weight","age","gender","profile_pic"]
+    desired_users = ["id", "username", "password", "height", "weight", "age", "gender", "profile_pic"]
     if sorted(user_cols) != sorted(desired_users):
         c.execute("DROP TABLE IF EXISTS users")
 
     # Check 'meals' table
     c.execute("PRAGMA table_info(meals)")
     meal_cols = [col[1] for col in c.fetchall()]
-    desired_meals = ["id","user_id","meal_time","source","caption","predicted","calories","meal_image"]
+    desired_meals = ["id", "user_id", "meal_time", "source", "caption", "predicted", "calories", "meal_image"]
     if sorted(meal_cols) != sorted(desired_meals):
         c.execute("DROP TABLE IF EXISTS meals")
 
@@ -223,9 +226,9 @@ def register_user(username, password, height, weight, age, gender, pic_path):
         c.execute("""
             INSERT INTO users (username, password, height, weight, age, gender, profile_pic)
             VALUES (?,?,?,?,?,?,?)
-        """,(username, password, height, weight, age, gender, pic_path))
+        """, (username, password, height, weight, age, gender, pic_path))
         conn.commit()
-        c.execute("SELECT id FROM users WHERE username=?",(username,))
+        c.execute("SELECT id FROM users WHERE username=?", (username,))
         row = c.fetchone()
         return True, "Registration successful!", row[0]
     except sqlite3.IntegrityError:
@@ -239,10 +242,11 @@ def login_user(username, password):
 
 def store_meal(uid, source, caption, preds, cals, path):
     c = conn.cursor()
+    meal_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     c.execute("""
         INSERT INTO meals (user_id, meal_time, source, caption, predicted, calories, meal_image)
         VALUES (?,?,?,?,?,?,?)
-    """, (uid, datetime.datetime.now(), source, caption, json.dumps(preds), cals, path))
+    """, (uid, meal_time, source, caption, json.dumps(preds), cals, path))
     conn.commit()
 
 def get_meal_history(uid):
@@ -282,46 +286,50 @@ def save_uploaded_file(file, folder):
         f.write(file.getbuffer())
     return path
 
-####################################
-# CAPTION PARSING (Optional items)
-####################################
-# This dictionary is used for food lookup
-NUMBER_WORDS = {
-    "zero":0, "one":1, "two":2, "three":3, "four":4, "five":5, "six":6, "seven":7,
-    "eight":8, "nine":9, "ten":10, "eleven":11, "twelve":12, "thirteen":13, "fourteen":14,
-    "fifteen":15, "twenty":20, "thirty":30, "forty":40, "fifty":50, "sixty":60
-}
+from datatable import NAIVE_ITEMS, NUMBER_WORDS
 
-# Improved parser: For each word in the caption that matches a food name,
-# look at the preceding word (if any) to determine the quantity.
 def parse_caption_items_naive(caption, item_map):
     tokens = caption.lower().split()
     results = {}
-    for i, token in enumerate(tokens):
-        token_clean = token.strip(".,!?")
-        # If the word is in the food items dictionary
-        if token_clean in item_map:
-            qty = 1  # default quantity
-            if i > 0:
-                prev_token = tokens[i-1].strip(".,!?")
-                if prev_token.isdigit():
-                    qty = int(prev_token)
-                elif prev_token in NUMBER_WORDS:
-                    qty = NUMBER_WORDS[prev_token]
-            if token_clean in results:
-                results[token_clean] = (results[token_clean][0] + qty, item_map[token_clean][0])
+    i = 0
+    while i < len(tokens):
+        word = tokens[i].strip(",.!?")
+        qty = 1
+        if word.isdigit():
+            qty = int(word)
+            i += 1
+            if i < len(tokens):
+                item = tokens[i].strip(",.!?")
+                i += 1
             else:
-                results[token_clean] = (qty, item_map[token_clean][0])
+                break
+        elif word in NUMBER_WORDS:
+            qty = NUMBER_WORDS[word]
+            i += 1
+            if i < len(tokens):
+                item = tokens[i].strip(",.!?")
+                i += 1
+            else:
+                break
+        else:
+            item = word
+            i += 1
+        if item in item_map:
+            calsEach = item_map[item][0]
+            if item not in results:
+                results[item] = (0, calsEach)
+            oldQty, cVal = results[item]
+            results[item] = (oldQty + qty, cVal)
     return results
 
 ####################################
-# MODEL CLASS (Heads named for old checkpoint)
+# MODEL CLASS
 ####################################
 class NutriVisionNetMultiHead(nn.Module):
     def __init__(self, food_dim=3, fv_dim=9, fast_dim=8, device="cuda", fine_tune_clip=False):
         super().__init__()
         self.device = device
-        
+
         self.clip_proc = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
         self.clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         for p in self.clip_model.text_model.parameters():
@@ -329,12 +337,12 @@ class NutriVisionNetMultiHead(nn.Module):
         if not fine_tune_clip:
             for p in self.clip_model.vision_model.parameters():
                 p.requires_grad = False
-        
+
         self.blip_proc = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
         self.blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
         for p in self.blip_model.parameters():
             p.requires_grad = False
-        
+
         fuse_dim = 1024
         hidden = 512
         self.food_nutrition_head = nn.Sequential(
@@ -357,13 +365,11 @@ class NutriVisionNetMultiHead(nn.Module):
         )
 
     def forward(self, image, source):
-        # BLIP: Generate caption
         bip = self.blip_proc(images=image, return_tensors="pt").to(self.device)
         with torch.no_grad():
             out_ids = self.blip_model.generate(**bip, max_length=50, num_beams=5)
         caption = self.blip_proc.decode(out_ids[0], skip_special_tokens=True)
 
-        # CLIP: Get image and text embeddings
         c_in = self.clip_proc(images=image, return_tensors="pt").to(self.device)
         img_emb = self.clip_model.get_image_features(**c_in)
         txt_in = self.clip_proc(text=[caption], return_tensors="pt").to(self.device)
@@ -432,6 +438,7 @@ def show_login_form():
             }
             st.session_state.preferred_diet = "Not specified"
             st.success("Logged in!")
+            st.button("Continue to Dashboard")
         else:
             st.error("Invalid credentials.")
 
@@ -476,6 +483,7 @@ def show_register_form():
                 st.session_state.preferred_diet = r_pd if r_pd else "Not specified"
                 st.query_params = {"user_id": [str(uid)], "username": [r_user]}
                 st.success("Registered & logged in!")
+                st.button("Continue to Dashboard")
             else:
                 st.error(msg)
 
@@ -495,7 +503,7 @@ if not st.session_state.logged_in:
 tabs = st.tabs(["Home", "Upload Meal", "Meal History", "Account", "Logout"])
 
 ####################################
-# TAB 0: HOME
+# TAB 0: HOME (Dashboard)
 ####################################
 with tabs[0]:
     st.markdown("<h1 class='app-title'>Dashboard</h1>", unsafe_allow_html=True)
@@ -517,20 +525,47 @@ with tabs[0]:
         st.write("No meal records available.")
 
 ####################################
-# TAB 1: UPLOAD
+# TAB 1: UPLOAD MEAL
 ####################################
-# Our food items lookup dictionary
-NAIVE_ITEMS = {
-    "fish": [100.0],
-    "lemon": [15.0],
-    "lemons": [15.0],
-    "herbs": [5.0],
-    "herb": [5.0],
-    "chicken": [250.0],
-    "tomato": [20.0],
-    "cheese": [80.0],
-    "bread": [70.0]
-}
+def parse_caption_items_naive(caption, item_map):
+    number_map = {
+      "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+      "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+      "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+      "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50
+    }
+    tokens = caption.lower().split()
+    results = {}
+    i = 0
+    while i < len(tokens):
+        word = tokens[i].strip(".,!?")
+        qty = 1
+        if word.isdigit():
+            qty = int(word)
+            i += 1
+            if i < len(tokens):
+                item = tokens[i].strip(".,!?")
+                i += 1
+            else:
+                break
+        elif word in number_map:
+            qty = number_map[word]
+            i += 1
+            if i < len(tokens):
+                item = tokens[i].strip(".,!?")
+                i += 1
+            else:
+                break
+        else:
+            item = word
+            i += 1
+        if item in item_map:
+            calsEach = item_map[item][0]
+            if item not in results:
+                results[item] = (0, calsEach)
+            oldQty, ce = results[item]
+            results[item] = (oldQty + qty, ce)
+    return results
 
 with tabs[1]:
     st.markdown("<h1 class='app-title'>Upload a Meal</h1>", unsafe_allow_html=True)
@@ -556,7 +591,7 @@ with tabs[1]:
             st.success("Inference done!")
             st.markdown(f"**Caption**: {caption}")
 
-            # Use the improved parsing method:
+            # Parse items from the caption
             items = parse_caption_items_naive(caption, NAIVE_ITEMS)
             total_parsed = 0
             trows = []
@@ -571,13 +606,12 @@ with tabs[1]:
                 st.write("**Parsed Items Total**:", f"{total_parsed:.2f}")
                 final_cals = total_parsed
             else:
-                st.write("No recognized items in the caption or no quantity found.")
                 final_cals = random.randint(200, 400)
                 st.write("**Predicted Total Calories**:", final_cals)
             
-            # Store in DB
+            preds_list = preds.cpu().tolist()
             path = save_uploaded_file(upmeal, "meal_images")
-            store_meal(st.session_state.user_id, source, caption, preds.tolist(), final_cals, path)
+            store_meal(st.session_state.user_id, source, caption, preds_list, final_cals, path)
             st.success("Meal recorded successfully!")
 
 ####################################
