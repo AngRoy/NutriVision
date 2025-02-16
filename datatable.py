@@ -130,6 +130,7 @@ NAIVE_ITEMS = {
     "mackerel": [205.0],
     "trout": [148.0],
     "cod": [82.0],
+    "fish": [106.0],
     
     # Plant-based Proteins (≈10 entries)
     "tofu": [76.0],
