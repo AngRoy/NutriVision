@@ -579,7 +579,7 @@ with tabs[1]:
             parsed= parse_caption_items_naive(caption, ITEM_MAP)
             tot=0.0
             lines=[]
-            for nm,(q, cE)= parsed.items():
+            for nm, (q, cE) in parsed.items():
                 line_cal= q*cE
                 tot+= line_cal
                 lines.append((nm,q,cE,line_cal))
