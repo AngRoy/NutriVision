@@ -1,7 +1,7 @@
 # NutriVision: A Multi-Modal Food Nutrition Estimator and Meal Tracker
 
 ### ***Model Trainning pipeline*** 
-![NutriVision Model Pipeline](Pipeline.drawio (3).png)
+![NutriVision Model Pipeline](PipelineNew.png)
 
 NutriVision is an end-to-end multi-modal system designed to estimate the nutritional content of meals from images and track daily calorie intake. The system leverages state-of-the-art computer vision and natural language processing models to analyze food images and provide detailed nutritional information. In addition, NutriVision offers a full-featured web application built with Streamlit, including user authentication, meal tracking, statistics, and an intuitive dashboard.
 
